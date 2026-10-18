@@ -66,6 +66,7 @@ most recent tail snapshot always wins, and kind 2/3 means the kernel died
 during that write.
 """
 
+import os
 import struct
 import sys
 
@@ -74,11 +75,12 @@ IPANIC_IV = 0xAABBCCDD
 HEADER_FIXED = 0x28
 ENTRY_SIZE = 0x40  # struct ipanic_data_header
 
-# Offsets used by klog_sink.c. Both sit past the ipanic record table
-# (which ends at 0x654000 on this device) inside the 0xa00000 partition.
+# Offsets used by klog_sink.c, in the regions measured to be erased in the
+# 0xa00000 byte expdb partition. Note 0x700000 is NOT free: it holds MTK's
+# RAM console (signature "DBGC", dram_console.c), so the tail lives below it.
 KLOG_MAGIC = 0x31474C4B
 KLOG_HDR_SIZE = 0x20
-KLOG_LOCATIONS = ((0x700000, "tail"), (0x800000, "full"))
+KLOG_LOCATIONS = ((0x660000, "tail"), (0x800000, "full"))
 
 
 def unscramble(buf, iv=IPANIC_IV):
@@ -164,6 +166,8 @@ def main():
         blob = handle.read()
 
     outdir = args[1] if len(args) > 1 else "."
+    if not os.path.isdir(outdir):
+        os.makedirs(outdir)
 
     records = parse(blob)
     if records:
@@ -196,7 +200,8 @@ def main():
         snapshots = parse_klog(blob)
         if not snapshots:
             print("\nno log sink snapshots (needs a kernel built with "
-                  "CONFIG_MTK_KLOG_SINK, and the dump read past 0x700000)")
+                  "CONFIG_MTK_KLOG_SINK, and the dump read to the end of the "
+                  "partition, i.e. count=10240)")
         for label, kind, seq, uptime_ms, write_ok, body in snapshots:
             path = "%s/klog_%s.txt" % (outdir.rstrip("/"), label)
             with open(path, "wb") as handle:
