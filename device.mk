@@ -214,12 +214,18 @@ $(call inherit-product, frameworks/native/build/tablet-10in-xhdpi-2048-dalvik-he
 #                              package; if the package does not exist that throws
 #                              NameNotFoundException, which the surrounding
 #                              catch (IllegalArgumentException) does not cover.
-#   Provision                - handles the com.android.wizard.LOAD intent that
-#                              SetupWizard fires when it finishes; without it the
-#                              wizard dies with ActivityNotFoundException.
-# The tablet has no modem, so these are inert at runtime - but they must be
-# installed for Settings and SetupWizard to survive.
+#   Provision                - NOT restored on purpose: cm's SetupWizard declares
+#                              LOCAL_OVERRIDES_PACKAGES := Provision, so AOSP's
+#                              build system filters Provision out of the install
+#                              list by design (main.mk: "Filter out (do not
+#                              install) any overridden packages"). Adding it to
+#                              PRODUCT_PACKAGES has no effect. The one-time
+#                              SetupWizard crash in the bugreport ("No Activity
+#                              found to handle com.android.wizard.LOAD") is a
+#                              wizard-side issue on this tablet, not a missing
+#                              package.
+# The tablet has no modem, so CarrierConfig and CellBroadcastReceiver are inert
+# at runtime - but Settings dereferences them unconditionally.
 PRODUCT_PACKAGES += \
     CarrierConfig \
-    CellBroadcastReceiver \
-    Provision
+    CellBroadcastReceiver

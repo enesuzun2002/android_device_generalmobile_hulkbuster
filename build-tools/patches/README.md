@@ -9,12 +9,14 @@ vendor blob tree:
                                   reverts below to apply)
   frameworks/native            <- from TestMT6572 cm-14.1 (contains
                                   "MediaTek: Fix Graphics")
+  packages/apps/Settings       <- from LineageOS cm-14.1
 
 Apply:
 
     cd build          && git am build-tools/patches/build/*.patch
     cd frameworks/base && git am build-tools/patches/frameworks-base/*.patch
     cd frameworks/native && git am build-tools/patches/frameworks-native/*.patch
+    cd packages/apps/Settings && git am build-tools/patches/packages-apps-Settings/*.patch
 
   0001-main.mk-PRODUCT_PACKAGES_FILTER-hook.patch
       Lets a device tree remove packages from the inherited product
@@ -32,3 +34,13 @@ Apply:
       Bootanimation: EGL init before the SF surface, correct visual,
       error logs. This turned the old silent black-screen failure into
       diagnosable logs (the ION EACCES class of failure).
+
+  0003-SettingsLib-TetherUtil-null-safe.patch (frameworks/base)
+  0001-Settings-null-safe-telephony-pages.patch (packages/apps/Settings)
+      Wifi-only robustness: CarrierConfigManager.getConfig() returns null
+      without a SIM/carrier config. TetherUtil dereferenced it, so opening
+      Settings > Connectivity crashed with an NPE; ApnSettings and
+      SecuritySettings did the same. WirelessSettings also queried
+      getApplicationEnabledSetting() for CellBroadcastReceiver inside a
+      catch (IllegalArgumentException) - the missing-package case throws
+      NameNotFoundException, which was not caught.
