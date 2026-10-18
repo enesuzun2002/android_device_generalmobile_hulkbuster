@@ -41,6 +41,29 @@ worth reading first:
     SYS_WDT_LOG       per-CPU register/stack dump from the FIQ watchdog
     _exp_detail.txt   the oops detail text
     PROC_CUR_TSK      the task that was running when it died
+
+The periodic log sink (drivers/misc/mediatek/aee/klog_sink.c) also writes
+snapshots of the ring buffer into this partition, past the end of the ipanic
+record table, so that a *hang* - which never reaches the panic path - is still
+capturable. Those are not part of the ipanic header; pass --klog to decode
+them:
+
+    adb shell "dd if=/dev/expdb of=/sdcard/expdb.bin bs=1024 count=10240"
+    ./decode_expdb.py expdb.bin --klog
+
+Each snapshot starts with a 32 byte header (little endian):
+
+    u32 magic     'KLG1' = 0x31474C4B
+    u32 kind      0 tail, 1 full, 2 panic, 3 restart
+    u32 seq       increments with every write
+    u32 len       payload bytes, excluding padding
+    u64 uptime_ms
+    u32 write_ok  set after the write returns (so it reads 0 if torn)
+    u32 reserved
+
+followed by `len` bytes of printk text, padded to a 512 byte boundary. The
+most recent tail snapshot always wins, and kind 2/3 means the kernel died
+during that write.
 """
 
 import struct
@@ -50,6 +73,12 @@ IPANIC_MAGIC = 0xAEE0DEAD
 IPANIC_IV = 0xAABBCCDD
 HEADER_FIXED = 0x28
 ENTRY_SIZE = 0x40  # struct ipanic_data_header
+
+# Offsets used by klog_sink.c. Both sit past the ipanic record table
+# (which ends at 0x654000 on this device) inside the 0xa00000 partition.
+KLOG_MAGIC = 0x31474C4B
+KLOG_HDR_SIZE = 0x20
+KLOG_LOCATIONS = ((0x700000, "tail"), (0x800000, "full"))
 
 
 def unscramble(buf, iv=IPANIC_IV):
@@ -97,34 +126,68 @@ def parse(blob):
     return records
 
 
+def parse_klog(blob):
+    """Decode the periodic log sink snapshots (see klog_sink.c)."""
+    found = []
+    for offset, label in KLOG_LOCATIONS:
+        if offset + KLOG_HDR_SIZE > len(blob):
+            continue
+        magic, kind, seq, length, uptime_ms, write_ok, _ = struct.unpack_from(
+            "<4I Q 2I", blob, offset
+        )
+        if magic != KLOG_MAGIC:
+            continue
+        if length == 0 or offset + KLOG_HDR_SIZE + length > len(blob):
+            continue
+        body = blob[offset + KLOG_HDR_SIZE:offset + KLOG_HDR_SIZE + length]
+        found.append((label, kind, seq, uptime_ms, write_ok, body))
+    return found
+
+
+KIND_NAMES = {0: "tail", 1: "full", 2: "PANIC", 3: "restart"}
+
+
 def main():
-    if len(sys.argv) < 2:
+    args = [a for a in sys.argv[1:] if a != "--klog"]
+    want_klog = "--klog" in sys.argv
+    if not args:
         raise SystemExit(__doc__)
 
-    with open(sys.argv[1], "rb") as handle:
+    with open(args[0], "rb") as handle:
         blob = handle.read()
 
+    outdir = args[1] if len(args) > 1 else "."
+
     records = parse(blob)
-    if not records:
-        print("\nno valid records - the dump is empty or the kernel never panicked")
-        return
+    if records:
+        for name, dtype, total, body in records:
+            safe = name.replace("/", "_")
+            if safe.endswith(".txt"):
+                safe = safe[:-4]
+            path = "%s/rec_%s.txt" % (outdir.rstrip("/"), safe)
+            with open(path, "wb") as handle:
+                handle.write(body)
 
-    outdir = "."
-    if len(sys.argv) > 2:
-        outdir = sys.argv[2]
+            printable = sum(1 for c in body if 32 <= c < 127 or c in (9, 10, 13))
+            ratio = 100.0 * printable / len(body) if body else 0.0
+            print("  %-20s type=%-3d total=%-10d %7d bytes  %3.0f%% printable  -> %s"
+                  % (name, dtype, total, len(body), ratio, path))
+    else:
+        print("\nno ipanic records - the kernel did not panic since the last erase")
 
-    for name, dtype, total, body in records:
-        safe = name.replace("/", "_")
-        if safe.endswith(".txt"):
-            safe = safe[:-4]
-        path = "%s/rec_%s.txt" % (outdir.rstrip("/"), safe)
-        with open(path, "wb") as handle:
-            handle.write(body)
-
-        printable = sum(1 for c in body if 32 <= c < 127 or c in (9, 10, 13))
-        ratio = 100.0 * printable / len(body) if body else 0.0
-        print("  %-20s type=%-3d total=%-10d %7d bytes  %3.0f%% printable  -> %s"
-              % (name, dtype, total, len(body), ratio, path))
+    if want_klog:
+        snapshots = parse_klog(blob)
+        if not snapshots:
+            print("\nno log sink snapshots (needs a kernel built with "
+                  "CONFIG_MTK_KLOG_SINK, and the dump read past 0x700000)")
+        for label, kind, seq, uptime_ms, write_ok, body in snapshots:
+            path = "%s/klog_%s.txt" % (outdir.rstrip("/"), label)
+            with open(path, "wb") as handle:
+                handle.write(body)
+            print("  %-20s %-8s seq=%-5d uptime=%8.3fs len=%-8d %s -> %s"
+                  % ("KLOG_" + label, KIND_NAMES.get(kind, str(kind)), seq,
+                     uptime_ms / 1000.0, len(body),
+                     "torn" if not write_ok else "ok", path))
 
 
 if __name__ == "__main__":
