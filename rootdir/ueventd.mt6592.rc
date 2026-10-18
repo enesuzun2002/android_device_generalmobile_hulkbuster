@@ -52,6 +52,11 @@
 /dev/ttyRB*      0660    radio    radio
 
 # Mali node
+# Graphics: ION is opened O_RDWR by every 3.10.72-era Mali gralloc client
+# (bootanim, SystemUI/ImageWallpaper, hwui apps) - keep it world-rw.
+# init.mt6592.rc's "chmod 0666 /dev/ion" is the primary fix; this guards
+# against the node being (re)created without init's chmod having run.
+/dev/ion                   0666    root       root
 /dev/mali       0666    system   graphics
 
 # touch

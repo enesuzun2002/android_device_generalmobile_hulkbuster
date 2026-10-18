@@ -22,4 +22,13 @@ ro.zygote.preload.enable=0
 # Disable dirty region for Mali
 debug.hwui.render_dirty_regions=false
 
+# Graphics: do not run the persistent asset atlas.
+# The stock ROM never ran it (its Zygote preload is disabled, which gates
+# AssetAtlasService in SystemServer). MTK's Mali cannot import the atlas
+# buffer: hwui AssetAtlas::init -> eglCreateImageKHR -> libMali shim
+# dereferences NULL after GpuAuxIsSupportFormat() reports the format
+# unsupported, taking SystemUI down in a restart loop.
+# SystemServer reads this via SystemProperties.getBoolean("config.disable_atlas").
+config.disable_atlas=1
+
 qemu.hw.mainkeys=1

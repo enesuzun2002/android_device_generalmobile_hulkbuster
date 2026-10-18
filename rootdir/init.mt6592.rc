@@ -1,5 +1,7 @@
+# NOTE: init.modem.rc (13 modem services: gsm0710muxd/rild/ccci_*/pppd_gprs)
+# is intentionally NOT imported any more - this tablet has no modem and the
+# bundled daemons would otherwise be class_started at every boot.
 import init.mt6592.usb.rc
-import init.modem.rc
 
 on charger
     mount ext4 /emmc@android /system ro wait
@@ -20,8 +22,17 @@ on init
 
    # By default, primary storage is physical
 
-    chown system graphics /dev/ion
-    chmod 0644 /dev/ion
+    # Change ION driver permission (matches the working reference ROM's
+    # "chmod 0666 /dev/ion"). The 3.10.72-era Mali gralloc opens /dev/ion
+    # O_RDWR inside every GPU client process (bootanim, SystemUI's
+    # ImageWallpaper, every hwui app) - both to allocate and to
+    # register/import buffers. At 0644 those opens fail with EACCES,
+    # gralloc0 register fails -13, the EGL window surface can never
+    # dequeue a buffer, and eglMakeCurrent dies with EGL_BAD_ALLOC:
+    # bootanim loses its render thread (backlit black screen, no
+    # animation) and SystemUI crashes in a restart loop. surfaceflinger
+    # (root) was the only process whose allocations ever succeeded.
+    chmod 0666 /dev/ion
 
     # TODO: fix system apps run with unknown user resume 0660
     chmod 0666 /dev/mali
@@ -247,6 +258,15 @@ on init
     chown system camera /dev/mtk_jpeg
 
 on post-fs-data
+    # Keep a copy of the kernel ring buffer on disk for as long as init
+    # survives. This is the only diagnostic we have without UART or adb.
+    start mtkdiag_pump
+
+    # The failures that matter happen after `on fs`, and logcat's buffer wraps,
+    # so take a rolling series of user-space snapshots too (tombstones
+    # included). See mtkdiag.sh watch.
+    start mtkdiag_watch
+
     # Create the directories used by the Wireless subsystem
     mkdir /data/misc/wifi 0770 wifi wifi
     mkdir /data/misc/wifi/sockets 0770 wifi wifi
@@ -350,6 +370,10 @@ on fs
     mkdir /protect_s 0771 system system
 
     mount_all /fstab.mt6592
+
+    # Dump boot state as soon as the real partitions are up, so a failure
+    # later on still leaves evidence on disk. See mtkdiag.sh.
+    start mtkdiag_snapshot
 
     write /proc/bootprof "INIT:NAND:Mount_END"
 
@@ -564,6 +588,29 @@ service BGW /system/xbin/BGW
     user root
     group gps system radio
     class main
+    oneshot
+
+# Boot diagnostics: leave a record of the boot on persistent storage so a
+# failed boot can be inspected afterwards. Harmless if it never runs.
+service mtkdiag_snapshot /system/bin/sh /mtkdiag.sh snapshot
+    class core
+    user root
+    group root
+    disabled
+    oneshot
+
+service mtkdiag_pump /system/bin/sh /mtkdiag.sh pump
+    class core
+    user root
+    group root
+    disabled
+    oneshot
+
+service mtkdiag_watch /system/bin/sh /mtkdiag.sh watch
+    class core
+    user root
+    group root
+    disabled
     oneshot
 
 # Offline charging
