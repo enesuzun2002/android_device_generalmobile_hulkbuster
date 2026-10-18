@@ -202,18 +202,25 @@ $(call inherit-product, frameworks/native/build/tablet-10in-xhdpi-2048-dalvik-he
 # useful on this tablet or spark background activity that has no purpose in
 # an unofficial build.
 #
-# This filter runs at the very end of the file, i.e. after every inherited
-# config has appended its PRODUCT_PACKAGES, so it wins regardless of source.
+# NOTE: this cannot be done with the usual
+#     PRODUCT_PACKAGES := $(filter-out X,$(PRODUCT_PACKAGES))
+# idiom: under the @inherit: product model (build/core/product.mk) main.mk
+# installs from the PRODUCTS.<product>.PRODUCT_PACKAGES union, which re-adds
+# every inherited file's list regardless of what the live variable held -
+# the filter was silently ineffective. Instead, PRODUCT_PACKAGES_FILTER is
+# consumed by a small documented hook in build/core/main.mk (search for
+# "hulkbuster"). PRODUCT_PACKAGES_FILTER is a plain make variable, outside
+# the tracked product namespace, so it survives from device.mk into main.mk.
+#
 # Kept (do not add to the list): Trebuchet, Camera2, Gallery2, Jelly (only
 # browser), Eleven, MusicFX, FMRadio, LockClock + WeatherManagerService +
 # WeatherProvider (lockscreen clock+weather), LineageSetupWizard,
 # CtsShim* framework bits.
 # The AudioSession broker in system_server (CMAudioServiceBroker) is built
-# for exactly this stub fallback - with no org.cyanogenmod.cmaudio.service
-# app it keeps serving an empty session list, and the stock reference ROM
-# ships neither CMAudioService nor AudioFX.
-PRODUCT_PACKAGES := $(filter-out \
+# for exactly this case - with no org.cyanogenmod.cmaudio.service app it
+# serves an empty session list, and the stock reference ROM ships neither
+# CMAudioService nor AudioFX.
+PRODUCT_PACKAGES_FILTER := \
     TeleService Telecom TelephonyProvider MmsService WAPPushManager \
     Email Exchange2 Terminal Recorder PhotoTable Profiles \
-    AudioFX CMAudioService Updater \
-    ,$(PRODUCT_PACKAGES))
+    AudioFX CMAudioService Updater

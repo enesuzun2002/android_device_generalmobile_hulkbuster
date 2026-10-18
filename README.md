@@ -83,3 +83,8 @@ Package options in device.mk:
     reverted upstream, so the shim still carries their symbols), and a
     fresh sepolicy (POLICYVERS will need to move to 29+; this tree's
     device/netd rules are minimal MTK additions).
+  * This workspace carries one patched build file:
+    build/core/main.mk adds PRODUCT_PACKAGES_FILTER (device-tree package
+    removal hook). 8.1 supports PRODUCT_PACKAGES += -<Package> natively,
+    so the device-side hook can move to that syntax there; the 14-package
+    list stays in device.mk under the filter block comment.
