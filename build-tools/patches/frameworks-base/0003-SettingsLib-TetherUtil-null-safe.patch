@@ -1,0 +1,65 @@
+From ac4f25c9fa8b655883b77350fc02babf11429ed9 Mon Sep 17 00:00:00 2001
+From: enesuzun2002 <enesuzun2002@users.noreply.github.com>
+Date: Sun, 18 Oct 2026 09:11:03 +0000
+Subject: [PATCH] SettingsLib: make TetherUtil.isEntitlementCheckRequired()
+ null-safe
+
+isEntitlementCheckRequired() did
+
+    configManager.getConfig().getBoolean(KEY_REQUIRE_ENTITLEMENT_CHECKS_BOOL)
+
+with no null checks. CarrierConfigManager.getConfig() returns null when
+there is no carrier config for the current subscription - which is always
+the case on a wifi-only device, and also happens when the CarrierConfig
+app is absent entirely. The caller, TetherSettings.
+isProvisioningNeededButUnavailable() -> WirelessSettings.onCreate(), then
+crashed Settings with an NPE as soon as the user opened the Connectivity
+(wireless) settings page.
+
+Return false (no entitlement check required, which is the default value of
+the key) for a missing service or a null config.
+
+Change-Id: I0f15951ca6808a85e3e29f6e9929759f3ffabea7
+Signed-off-by: enesuzun2002 <emurat.uzun@gmail.com>
+---
+ .../src/com/android/settingslib/TetherUtil.java         | 17 ++++++++++++++++-
+ 1 file changed, 16 insertions(+), 1 deletion(-)
+
+diff --git a/packages/SettingsLib/src/com/android/settingslib/TetherUtil.java b/packages/SettingsLib/src/com/android/settingslib/TetherUtil.java
+index d368de9..e15e6b2 100644
+--- a/packages/SettingsLib/src/com/android/settingslib/TetherUtil.java
++++ b/packages/SettingsLib/src/com/android/settingslib/TetherUtil.java
+@@ -17,6 +17,7 @@ package com.android.settingslib;
+ 
+ import android.content.Context;
+ import android.net.wifi.WifiManager;
++import android.os.PersistableBundle;
+ import android.os.SystemProperties;
+ import android.telephony.CarrierConfigManager;
+ 
+@@ -31,7 +32,21 @@ public class TetherUtil {
+     private static boolean isEntitlementCheckRequired(Context context) {
+         final CarrierConfigManager configManager = (CarrierConfigManager) context
+              .getSystemService(Context.CARRIER_CONFIG_SERVICE);
+-        return configManager.getConfig().getBoolean(CarrierConfigManager
++        if (configManager == null) {
++            // No CarrierConfig service on this build (or no permission):
++            // nothing to enforce, so no entitlement check is required.
++            return false;
++        }
++        final PersistableBundle config = configManager.getConfig();
++        if (config == null) {
++            // getConfig() returns null when there is no SIM / no carrier
++            // config for the current subscription (always the case on a
++            // wifi-only device). Treat it as "no entitlement check", which
++            // is what the default KEY_REQUIRE_ENTITLEMENT_CHECKS_BOOL value
++            // (false) means anyway.
++            return false;
++        }
++        return config.getBoolean(CarrierConfigManager
+              .KEY_REQUIRE_ENTITLEMENT_CHECKS_BOOL);
+     }
+ 
+-- 
+2.7.4
+

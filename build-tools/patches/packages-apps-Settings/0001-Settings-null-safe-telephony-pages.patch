@@ -1,0 +1,125 @@
+From b05fb61af19880ede3a39144b83460f8edf9614e Mon Sep 17 00:00:00 2001
+From: enesuzun2002 <enesuzun2002@users.noreply.github.com>
+Date: Sun, 18 Oct 2026 09:10:59 +0000
+Subject: [PATCH] Settings: don't crash the wireless page on a wifi-only device
+
+Three fixes for our modem-less tablet:
+
+1. WirelessSettings.onCreate() called
+   TetherUtil.isProvisioningNeededButUnavailable() which NPE'd inside
+   TetherUtil (fixed separately in frameworks/base SettingsLib) whenever
+   CarrierConfigManager.getConfig() returned null. Opening Settings >
+   Connectivity crashed with
+     java.lang.NullPointerException: ...PersistableBundle.getBoolean()...
+       at TetherUtil.isEntitlementCheckRequired(TetherUtil.java:34)
+       at TetherSettings.isProvisioningNeededButUnavailable(...:603)
+       at WirelessSettings.onCreate(...:368)
+
+2. The CMAS block queried
+   PackageManager.getApplicationEnabledSetting("com.android.cellbroadcastreceiver")
+   inside catch (IllegalArgumentException). When the package is not
+   installed that call throws NameNotFoundException, which was not
+   caught - so the very same page would crash again right after fix 1 on
+   builds without CellBroadcastReceiver. Both call sites now catch
+   NameNotFoundException as well.
+
+3. ApnSettings and SecuritySettings dereferenced CarrierConfigManager
+   getConfig() without a null check (null whenever there is no carrier
+   config / SIM). They now fall back to the framework defaults of those
+   keys instead of crashing the screen.
+
+Change-Id: I666a820789c9c0cc4649bc0dd6548d4b374a8517
+Signed-off-by: enesuzun2002 <emurat.uzun@gmail.com>
+---
+ src/com/android/settings/ApnSettings.java      | 10 +++++++---
+ src/com/android/settings/SecuritySettings.java |  8 ++++++--
+ src/com/android/settings/WirelessSettings.java | 15 +++++++++++++--
+ 3 files changed, 26 insertions(+), 7 deletions(-)
+
+diff --git a/src/com/android/settings/ApnSettings.java b/src/com/android/settings/ApnSettings.java
+index 5bd0876..7a45e1d 100644
+--- a/src/com/android/settings/ApnSettings.java
++++ b/src/com/android/settings/ApnSettings.java
+@@ -184,9 +184,13 @@ public class ApnSettings extends RestrictedSettingsFragment implements
+ 
+         CarrierConfigManager configManager = (CarrierConfigManager)
+                 getSystemService(Context.CARRIER_CONFIG_SERVICE);
+-        PersistableBundle b = configManager.getConfig();
+-        mHideImsApn = b.getBoolean(CarrierConfigManager.KEY_HIDE_IMS_APN_BOOL);
+-        mAllowAddingApns = b.getBoolean(CarrierConfigManager.KEY_ALLOW_ADDING_APNS_BOOL);
++        PersistableBundle b = (configManager != null) ? configManager.getConfig() : null;
++        // getConfig() is null without a SIM / carrier config (always the case
++        // on this wifi-only tablet): fall back to the framework defaults of
++        // these keys instead of dereferencing null.
++        mHideImsApn = (b != null) && b.getBoolean(CarrierConfigManager.KEY_HIDE_IMS_APN_BOOL);
++        mAllowAddingApns = (b == null)
++                || b.getBoolean(CarrierConfigManager.KEY_ALLOW_ADDING_APNS_BOOL);
+         mUserManager = UserManager.get(activity);
+     }
+ 
+diff --git a/src/com/android/settings/SecuritySettings.java b/src/com/android/settings/SecuritySettings.java
+index f92ec7e..033832a 100644
+--- a/src/com/android/settings/SecuritySettings.java
++++ b/src/com/android/settings/SecuritySettings.java
+@@ -311,12 +311,16 @@ public class SecuritySettings extends SettingsPreferenceFragment
+         // Do not display SIM lock for devices without an Icc card
+         CarrierConfigManager cfgMgr = (CarrierConfigManager)
+                 getActivity().getSystemService(Context.CARRIER_CONFIG_SERVICE);
+-        PersistableBundle b = cfgMgr.getConfig();
++        // Null when there is no carrier config (no SIM, or no CarrierConfig
++        // service); treat as "don't hide" rather than dereferencing null.
++        PersistableBundle b = (cfgMgr != null) ? cfgMgr.getConfig() : null;
++        final boolean hideSimLock = (b != null)
++                && b.getBoolean(CarrierConfigManager.KEY_HIDE_SIM_LOCK_SETTINGS_BOOL);
+         PreferenceGroup iccLockGroup = (PreferenceGroup) root.findPreference(KEY_SIM_LOCK);
+         Preference iccLock = root.findPreference(KEY_SIM_LOCK_SETTINGS);
+ 
+         if (!mIsAdmin
+-                || b.getBoolean(CarrierConfigManager.KEY_HIDE_SIM_LOCK_SETTINGS_BOOL)) {
++                || hideSimLock) {
+             root.removePreference(iccLockGroup);
+         } else {
+             SubscriptionManager subMgr = SubscriptionManager.from(getActivity());
+diff --git a/src/com/android/settings/WirelessSettings.java b/src/com/android/settings/WirelessSettings.java
+index 3fa4357..c2ac8fc 100644
+--- a/src/com/android/settings/WirelessSettings.java
++++ b/src/com/android/settings/WirelessSettings.java
+@@ -26,6 +26,7 @@ import android.content.ComponentName;
+ import android.content.Context;
+ import android.content.DialogInterface;
+ import android.content.Intent;
++import android.content.pm.NameNotFoundException;
+ import android.content.pm.PackageManager;
+ import android.content.res.Resources;
+ import android.net.ConnectivityManager;
+@@ -385,7 +386,12 @@ public class WirelessSettings extends SettingsPreferenceFragment implements Inde
+                     isCellBroadcastAppLinkEnabled = false;  // CMAS app disabled
+                 }
+             }
+-        } catch (IllegalArgumentException ignored) {
++        } catch (IllegalArgumentException | NameNotFoundException ignored) {
++            // CMAS app not installed. getApplicationEnabledSetting() throws
++            // NameNotFoundException when the package is missing, which the
++            // previous IllegalArgumentException-only catch did not cover:
++            // without CellBroadcastReceiver this page crashed Settings.
++            isCellBroadcastAppLinkEnabled = false;
+             isCellBroadcastAppLinkEnabled = false;  // CMAS app not installed
+         }
+         if (!mUm.isAdminUser() || !isCellBroadcastAppLinkEnabled ||
+@@ -558,7 +564,12 @@ public class WirelessSettings extends SettingsPreferenceFragment implements Inde
+                             isCellBroadcastAppLinkEnabled = false;  // CMAS app disabled
+                         }
+                     }
+-                } catch (IllegalArgumentException ignored) {
++                } catch (IllegalArgumentException | NameNotFoundException ignored) {
++                    // CMAS app not installed. getApplicationEnabledSetting() throws
++                    // NameNotFoundException when the package is missing, which the
++                    // previous IllegalArgumentException-only catch did not cover:
++                    // without CellBroadcastReceiver this page crashed Settings.
++                    isCellBroadcastAppLinkEnabled = false;
+                     isCellBroadcastAppLinkEnabled = false;  // CMAS app not installed
+                 }
+                 if (!um.isAdminUser() || !isCellBroadcastAppLinkEnabled) {
+-- 
+2.7.4
+
