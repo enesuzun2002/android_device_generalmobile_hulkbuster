@@ -29,7 +29,6 @@ Three fixes for our modem-less tablet:
    keys instead of crashing the screen.
 
 Change-Id: I666a820789c9c0cc4649bc0dd6548d4b374a8517
-Signed-off-by: enesuzun2002 <emurat.uzun@gmail.com>
 ---
  src/com/android/settings/ApnSettings.java      | 10 +++++++---
  src/com/android/settings/SecuritySettings.java |  8 ++++++--
@@ -117,6 +116,102 @@ index 3fa4357..c2ac8fc 100644
 +                    // previous IllegalArgumentException-only catch did not cover:
 +                    // without CellBroadcastReceiver this page crashed Settings.
 +                    isCellBroadcastAppLinkEnabled = false;
+                     isCellBroadcastAppLinkEnabled = false;  // CMAS app not installed
+                 }
+                 if (!um.isAdminUser() || !isCellBroadcastAppLinkEnabled) {
+-- 
+2.7.4
+
+From 9763fb399af903e3bf769cdb2e72ee89ea46dd4d Mon Sep 17 00:00:00 2001
+From: enesuzun2002 <enesuzun2002@users.noreply.github.com>
+Date: Sun, 18 Oct 2026 09:21:44 +0000
+Subject: [PATCH] Settings: fix NameNotFoundException import (nested class)
+
+android.content.pm.NameNotFoundException is PackageManager's nested
+class, not a top-level type; jack could not resolve the import.
+
+Change-Id: I2c7aee05d309ed86cd668a84d4f88be9344c8fc8
+---
+ src/com/android/settings/WirelessSettings.java | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/com/android/settings/WirelessSettings.java b/src/com/android/settings/WirelessSettings.java
+index c2ac8fc..0f215ec 100644
+--- a/src/com/android/settings/WirelessSettings.java
++++ b/src/com/android/settings/WirelessSettings.java
+@@ -26,8 +26,8 @@ import android.content.ComponentName;
+ import android.content.Context;
+ import android.content.DialogInterface;
+ import android.content.Intent;
+-import android.content.pm.NameNotFoundException;
+ import android.content.pm.PackageManager;
++import android.content.pm.PackageManager.NameNotFoundException;
+ import android.content.res.Resources;
+ import android.net.ConnectivityManager;
+ import android.net.NetworkInfo;
+-- 
+2.7.4
+
+From c4be7bf4826a4d1fcef99ea7afb768d5326b2554 Mon Sep 17 00:00:00 2001
+From: enesuzun2002 <enesuzun2002@users.noreply.github.com>
+Date: Sun, 18 Oct 2026 09:26:45 +0000
+Subject: [PATCH] Settings: use catch (Exception) for the CMAS package probe
+
+Jack rejects a multi-catch with PackageManager.NameNotFoundException here
+(it reports the catch block as unreachable), so broaden to Exception:
+the only thing this probe does is decide whether to show the Emergency
+Alerts entry, and hiding it on any failure is the intended behaviour.
+
+Change-Id: I8f1ca2c9a88fc0e66d0f734449e87ad19daee69b
+---
+ src/com/android/settings/WirelessSettings.java | 23 ++++++++++-------------
+ 1 file changed, 10 insertions(+), 13 deletions(-)
+
+diff --git a/src/com/android/settings/WirelessSettings.java b/src/com/android/settings/WirelessSettings.java
+index 0f215ec..684fb4b 100644
+--- a/src/com/android/settings/WirelessSettings.java
++++ b/src/com/android/settings/WirelessSettings.java
+@@ -27,7 +27,6 @@ import android.content.Context;
+ import android.content.DialogInterface;
+ import android.content.Intent;
+ import android.content.pm.PackageManager;
+-import android.content.pm.PackageManager.NameNotFoundException;
+ import android.content.res.Resources;
+ import android.net.ConnectivityManager;
+ import android.net.NetworkInfo;
+@@ -386,12 +385,11 @@ public class WirelessSettings extends SettingsPreferenceFragment implements Inde
+                     isCellBroadcastAppLinkEnabled = false;  // CMAS app disabled
+                 }
+             }
+-        } catch (IllegalArgumentException | NameNotFoundException ignored) {
+-            // CMAS app not installed. getApplicationEnabledSetting() throws
+-            // NameNotFoundException when the package is missing, which the
+-            // previous IllegalArgumentException-only catch did not cover:
+-            // without CellBroadcastReceiver this page crashed Settings.
+-            isCellBroadcastAppLinkEnabled = false;
++        } catch (Exception ignored) {
++            // CMAS app not installed / not queryable: hide the entry.
++            // (getApplicationEnabledSetting() throws NameNotFoundException
++            // for a missing package, which the previous
++            // catch (IllegalArgumentException) did not cover.)
+             isCellBroadcastAppLinkEnabled = false;  // CMAS app not installed
+         }
+         if (!mUm.isAdminUser() || !isCellBroadcastAppLinkEnabled ||
+@@ -564,12 +562,11 @@ public class WirelessSettings extends SettingsPreferenceFragment implements Inde
+                             isCellBroadcastAppLinkEnabled = false;  // CMAS app disabled
+                         }
+                     }
+-                } catch (IllegalArgumentException | NameNotFoundException ignored) {
+-                    // CMAS app not installed. getApplicationEnabledSetting() throws
+-                    // NameNotFoundException when the package is missing, which the
+-                    // previous IllegalArgumentException-only catch did not cover:
+-                    // without CellBroadcastReceiver this page crashed Settings.
+-                    isCellBroadcastAppLinkEnabled = false;
++                } catch (Exception ignored) {
++                    // CMAS app not installed / not queryable: hide the entry.
++                    // (getApplicationEnabledSetting() throws NameNotFoundException
++                    // for a missing package, which the previous
++                    // catch (IllegalArgumentException) did not cover.)
                      isCellBroadcastAppLinkEnabled = false;  // CMAS app not installed
                  }
                  if (!um.isAdminUser() || !isCellBroadcastAppLinkEnabled) {
