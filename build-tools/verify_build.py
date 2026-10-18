@@ -124,8 +124,9 @@ GONE = [
     "system/bin/rild",
     "system/bin/rildmd2",
     "system/priv-app/Dialer/Dialer.apk",
-    "system/priv-app/CarrierConfig/CarrierConfig.apk",
-    "system/priv-app/CellBroadcastReceiver/CellBroadcastReceiver.apk",
+    # NOT in GONE any more: CarrierConfig and CellBroadcastReceiver are back
+    # (see device.mk "framework-required packages"). Settings dereferences
+    # both unconditionally, and without them Settings > Connectivity crashes.
     "system/priv-app/CallLogBackup/CallLogBackup.apk",
     "system/priv-app/EmergencyInfo/EmergencyInfo.apk",
     "system/etc/permissions/android.hardware.telephony.gsm.xml",
