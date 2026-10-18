@@ -1,0 +1,44 @@
+From 578d4892014898b583f0bf756f25a3773ad307cd Mon Sep 17 00:00:00 2001
+From: hulkbuster-build <build@localhost>
+Date: Sun, 18 Oct 2026 06:27:57 +0000
+Subject: [PATCH] main.mk: PRODUCT_PACKAGES_FILTER hook for device-tree package
+ removal
+
+The @inherit:-based product model (build/core/product.mk) unions every
+inherited file's PRODUCT_PACKAGES into PRODUCTS.<product>.PRODUCT_PACKAGES
+and installs from that snapshot. A PRODUCT_PACKAGES := $(filter-out ...)
+in a device makefile cannot subtract base/packages there - the filtered
+live variable is never read at install time, so the filter is silently
+ineffective. Add one documented hook: main.mk now filters product_MODULES
+against PRODUCT_PACKAGES_FILTER (plain make variable set in a device.mk,
+outside the tracked product namespace).
+
+Change-Id: I8c61049c5e111c63b4155fa9a156c4c764099544
+Signed-off-by: enesuzun2002 <emurat.uzun@gmail.com>
+---
+ core/main.mk | 9 +++++++++
+ 1 file changed, 9 insertions(+)
+
+diff --git a/core/main.mk b/core/main.mk
+index 7df4dcb..fe1813f 100644
+--- a/core/main.mk
++++ b/core/main.mk
+@@ -717,6 +717,15 @@ ifdef FULL_BUILD
+   # by the appropriate product definition file, which was included
+   # by product_config.mk.
+   product_MODULES := $(PRODUCTS.$(INTERNAL_PRODUCT).PRODUCT_PACKAGES)
++  # hulkbuster: let the device tree remove packages from the product union.
++  # With the @inherit:-based product model (build/core/product.mk), a
++  # "PRODUCT_PACKAGES := $(filter-out ...)" in a device makefile cannot
++  # subtract packages that base configs add: main.mk installs from the
++  # PRODUCTS.<product>.PRODUCT_PACKAGES union, which unconditionally re-adds
++  # every inherited file's additions. PRODUCT_PACKAGES_FILTER is set in
++  # device/generalmobile/hulkbuster/device.mk (a plain make variable, outside
++  # the tracked product namespace, so it survives the config pass).
++  product_MODULES := $(filter-out $(PRODUCT_PACKAGES_FILTER),$(product_MODULES))
+   # Filter out the overridden packages before doing expansion
+   product_MODULES := $(filter-out $(foreach p, $(product_MODULES), \
+       $(PACKAGES.$(p).OVERRIDES)), $(product_MODULES))
+-- 
+2.7.4
+
