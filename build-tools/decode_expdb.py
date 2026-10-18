@@ -106,9 +106,16 @@ def parse(blob):
 
     records = []
     index = 0
+    # The record array is a fixed size recorded in the header (hdrsize);
+    # walking past it finds whatever follows in the partition and decodes
+    # it as if it were a record.
+    if size > HEADER_FIXED:
+        n_sections = (size - HEADER_FIXED) // ENTRY_SIZE
+    else:
+        n_sections = len(blob) // ENTRY_SIZE
     while True:
         base = HEADER_FIXED + ENTRY_SIZE * index
-        if base + ENTRY_SIZE > len(blob):
+        if base + ENTRY_SIZE > len(blob) or index >= n_sections:
             break
         dtype, valid, offset, used, total, encrypt = struct.unpack_from(
             "<6I", blob, base
@@ -164,14 +171,24 @@ def main():
             safe = name.replace("/", "_")
             if safe.endswith(".txt"):
                 safe = safe[:-4]
-            path = "%s/rec_%s.txt" % (outdir.rstrip("/"), safe)
-            with open(path, "wb") as handle:
-                handle.write(body)
 
             printable = sum(1 for c in body if 32 <= c < 127 or c in (9, 10, 13))
             ratio = 100.0 * printable / len(body) if body else 0.0
-            print("  %-20s type=%-3d total=%-10d %7d bytes  %3.0f%% printable  -> %s"
-                  % (name, dtype, total, len(body), ratio, path))
+
+            # Not every record is text. SYS_MINI_RDUMP is a raw register
+            # dump and PROC_CUR_TSK is a packed struct, so writing them out
+            # as .txt and eyeballing "0% printable" is misleading. Give
+            # them a .bin extension instead.
+            binary = ratio < 60.0
+            ext = "bin" if binary else "txt"
+            path = "%s/rec_%s.%s" % (outdir.rstrip("/"), safe, ext)
+            with open(path, "wb") as handle:
+                handle.write(body)
+
+            print("  %-20s type=%-3d total=%-10d %7d bytes  %3.0f%% printable "
+                  "%-6s -> %s"
+                  % (name, dtype, total, len(body), ratio,
+                     "(binary)" if binary else "(text)", path))
     else:
         print("\nno ipanic records - the kernel did not panic since the last erase")
 
