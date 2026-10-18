@@ -15,19 +15,33 @@ TARGET_CPU_VARIANT := cortex-a7
 
 # Kernel 
 TARGET_PREBUILT_KERNEL := $(DEVICE_PATH)/kernel
-BOARD_KERNEL_CMDLINE :=
-BOARD_KERNEL_BASE := 0x10000000
+# Matches the known-good 3.10.72 jdct build (see /workspace/unpacked_boot).
+# bootopt/selinux are carried over verbatim from that build for consistency;
+# note the kernel itself contains neither string, so they are inert.
+# console= is added so kernel/init output is available over UART for debugging.
+BOARD_KERNEL_CMDLINE := console=ttyMT0,115200n8 androidboot.hardware=mt6592
+BOARD_KERNEL_BASE := 0x80000000
 BOARD_KERNEL_PAGESIZE := 2048
 
-# make_ext4fs requires numbers in dec format
+# Also emitted into the ZIP so flash tooling records the same offsets.
+BOARD_RAMDISK_OFFSET := 0x04000000
+BOARD_KERNEL_TAGS_OFFSET := 0x0e000000
+
+# Sizes are dec format and must fit the real partition map
+# (blobs/dumchar_info.txt): boot 0xa00000, recovery 0xa00000, android 0x40000000.
 BOARD_BOOTIMAGE_PARTITION_SIZE := 10485760
-BOARD_RECOVERYIMAGE_PARTITION_SIZE := 13485760
-BOARD_SYSTEMIMAGE_PARTITION_SIZE := 1258291200
+BOARD_RECOVERYIMAGE_PARTITION_SIZE := 10485760
+BOARD_SYSTEMIMAGE_PARTITION_SIZE := 1073741824
 BOARD_USERDATAIMAGE_PARTITION_SIZE := 1237319680
 BOARD_CACHEIMAGE_PARTITION_SIZE := 134217728
 BOARD_FLASH_BLOCK_SIZE := 131072
 TARGET_USERIMAGES_USE_EXT4 := true
 TARGET_USERIMAGES_SPARSE_EXT_DISABLED := false
+
+# The 3.10.72 kernel is larger than the old 3.4.67 one, so kernel+ramdisk no
+# longer fits the real 10MB recovery partition at gzip. Compress the recovery
+# ramdisk with LZMA (requires an `lzma` binary on the build host).
+LZMA_RAMDISK_TARGETS := recovery
 
 # Enable kmodules
 TARGET_KMODULES := true
@@ -41,10 +55,27 @@ BOARD_CUSTOM_BOOTIMG_MK := $(DEVICE_PATH)/bootimg.mk
 BOARD_CUSTOM_BOOTIMG := true
 
 # mkbootimg ARGS
-BOARD_MKBOOTIMG_ARGS := --mtk 1
+# The offsets below are dictated by the hardware and match the known-good
+# 3.10.72 image (/workspace/unpacked_boot/boot.img-{ramdisk,tags}_offset).
+# mtkbootimg.c's compiled-in defaults (ramdisk 0x01000000, tags 0x00000100)
+# are wrong for this board and leave the device hanging on the bootloader logo.
+# BOARD_RAMDISK_OFFSET / BOARD_KERNEL_TAGS_OFFSET are NOT passed to mkbootimg
+# by the build system (build/core/Makefile only writes them into the ZIP), so
+# the flags must go here.
+BOARD_MKBOOTIMG_ARGS := --mtk 1 \
+    --ramdisk_offset 0x04000000 \
+    --tags_offset 0x0e000000 \
+    --second_offset 0x00f00000
 
-# Enable dex-preoptimization
-WITH_DEXPREOPT := false
+# Dex preoptimization
+# Pre-opt only the boot class path (framework jars): the 1 GiB /system could
+# not also hold full pre-opt of ~80 system apks. Boot-classpath pre-opt is
+# what speeds app cold start (apps share the framework oat) and shortens
+# first boot. If the build ever fails with "Failed to mmap at expected
+# address" (host ASLR during dex2oat), revert WITH_DEXPREOPT / the
+# BOOT_IMG_ONLY line - it is a build-time failure only.
+WITH_DEXPREOPT := true
+WITH_DEXPREOPT_BOOT_IMG_ONLY := true
 DONT_DEXPREOPT_PREBUILTS := true
 
 # Link libmtk_symbols
