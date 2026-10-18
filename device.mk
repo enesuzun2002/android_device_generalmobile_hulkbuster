@@ -62,6 +62,10 @@ PRODUCT_PACKAGES += \
 PRODUCT_COPY_FILES += \
     $(DEVICE_PATH)/configs/audio_policy.conf:system/etc/audio_policy.conf
 
+# GSM
+PRODUCT_COPY_FILES += \
+     $(DEVICE_PATH)/configs/spn-conf.xml:system/etc/spn-conf.xml
+
 # Bluetooth
 PRODUCT_PACKAGES += libbt-vendor
 
@@ -86,6 +90,7 @@ PRODUCT_COPY_FILES += \
 PRODUCT_COPY_FILES += \
     $(DEVICE_PATH)/rootdir/enableswap.sh:root/enableswap.sh \
     $(DEVICE_PATH)/rootdir/fstab.mt6592:root/fstab.mt6592 \
+    $(DEVICE_PATH)/rootdir/init.modem.rc:root/init.modem.rc \
     $(DEVICE_PATH)/rootdir/init.mt6592.rc:root/init.mt6592.rc \
     $(DEVICE_PATH)/rootdir/init.mt6592.usb.rc:root/init.mt6592.usb.rc \
     $(DEVICE_PATH)/rootdir/ueventd.mt6592.rc:root/ueventd.mt6592.rc \
@@ -194,33 +199,27 @@ PRODUCT_PACKAGES += \
 
 $(call inherit-product, frameworks/native/build/tablet-10in-xhdpi-2048-dalvik-heap.mk)
 
-# De-phone / trim the product.
+# Packages that the framework still expects to exist, restored on top of
+# whatever full_base.mk / vendor/cm/config pull in.
 #
-# This device has no modem: drop everything telephony that still ships via
-# the full_base.mk -> core*.mk chain (we do not inherit full_base_telephony).
-# Also drop LineageOS (vendor/cm/config/common*.mk) packages that are not
-# useful on this tablet or spark background activity that has no purpose in
-# an unofficial build.
-#
-# NOTE: this cannot be done with the usual
-#     PRODUCT_PACKAGES := $(filter-out X,$(PRODUCT_PACKAGES))
-# idiom: under the @inherit: product model (build/core/product.mk) main.mk
-# installs from the PRODUCTS.<product>.PRODUCT_PACKAGES union, which re-adds
-# every inherited file's list regardless of what the live variable held -
-# the filter was silently ineffective. Instead, PRODUCT_PACKAGES_FILTER is
-# consumed by a small documented hook in build/core/main.mk (search for
-# "hulkbuster"). PRODUCT_PACKAGES_FILTER is a plain make variable, outside
-# the tracked product namespace, so it survives from device.mk into main.mk.
-#
-# Kept (do not add to the list): Trebuchet, Camera2, Gallery2, Jelly (only
-# browser), Eleven, MusicFX, FMRadio, LockClock + WeatherManagerService +
-# WeatherProvider (lockscreen clock+weather), LineageSetupWizard,
-# CtsShim* framework bits.
-# The AudioSession broker in system_server (CMAudioServiceBroker) is built
-# for exactly this case - with no org.cyanogenmod.cmaudio.service app it
-# serves an empty session list, and the stock reference ROM ships neither
-# CMAudioService nor AudioFX.
-PRODUCT_PACKAGES_FILTER := \
-    TeleService Telecom TelephonyProvider MmsService WAPPushManager \
-    Email Exchange2 Terminal Recorder PhotoTable Profiles \
-    AudioFX CMAudioService Updater
+# These were removed during the de-phone pass, but parts of the framework
+# dereference them unconditionally:
+#   CarrierConfig            - Settings' TetherUtil.isEntitlementCheckRequired()
+#                              calls CarrierConfigManager.getConfig().getBoolean()
+#                              with no null check; with the app gone getConfig()
+#                              returns null and opening the Connectivity (wireless)
+#                              settings page crashes Settings with an NPE.
+#   CellBroadcastReceiver    - WirelessSettings.onCreate() queries
+#                              PackageManager.getApplicationEnabledSetting() for this
+#                              package; if the package does not exist that throws
+#                              NameNotFoundException, which the surrounding
+#                              catch (IllegalArgumentException) does not cover.
+#   Provision                - handles the com.android.wizard.LOAD intent that
+#                              SetupWizard fires when it finishes; without it the
+#                              wizard dies with ActivityNotFoundException.
+# The tablet has no modem, so these are inert at runtime - but they must be
+# installed for Settings and SetupWizard to survive.
+PRODUCT_PACKAGES += \
+    CarrierConfig \
+    CellBroadcastReceiver \
+    Provision

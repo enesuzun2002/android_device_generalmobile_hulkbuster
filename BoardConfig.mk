@@ -68,14 +68,22 @@ BOARD_MKBOOTIMG_ARGS := --mtk 1 \
     --second_offset 0x00f00000
 
 # Dex preoptimization
-# Pre-opt only the boot class path (framework jars): the 1 GiB /system could
-# not also hold full pre-opt of ~80 system apks. Boot-classpath pre-opt is
-# what speeds app cold start (apps share the framework oat) and shortens
-# first boot. If the build ever fails with "Failed to mmap at expected
-# address" (host ASLR during dex2oat), revert WITH_DEXPREOPT / the
-# BOOT_IMG_ONLY line - it is a build-time failure only.
-WITH_DEXPREOPT := true
-WITH_DEXPREOPT_BOOT_IMG_ONLY := true
+# OFF again. The boot-image pre-opt experiment (WITH_DEXPREOPT +
+# WITH_DEXPREOPT_BOOT_IMG_ONLY) shipped in build 88e67bfc28 together with the
+# app trim, and the device showed two problems in that combination:
+#   1. system_server crashed with a SIGSEGV inside a JNI reflection call
+#      (art::Constructor_newInstance0 -> a return address that is not code at
+#      all: an OatMethodOffsets slot in core-oj.oat), so ART executed a bad
+#      method pointer. (Tracked as the "wifi connect -> soft restart" bug.)
+#   2. ART never used the prebuilt oat: the crash maps
+#      /data/dalvik-cache/arm/system@framework@boot-core-oj.oat, i.e. the
+#      framework was compiled on device at first boot instead.
+# Since (2) means the experiment buys nothing on this device while (1) is an
+# unresolved crash in the only build that had it enabled, pre-opt stays off.
+# To retry it later, build with both flags true and check on device that
+# /system/framework/arm/boot.art is actually mapped before believing any
+# speedup.
+WITH_DEXPREOPT := false
 DONT_DEXPREOPT_PREBUILTS := true
 
 # Link libmtk_symbols

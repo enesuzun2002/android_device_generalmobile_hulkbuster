@@ -1,7 +1,18 @@
-# NOTE: init.modem.rc (13 modem services: gsm0710muxd/rild/ccci_*/pppd_gprs)
-# is intentionally NOT imported any more - this tablet has no modem and the
-# bundled daemons would otherwise be class_started at every boot.
+# platform specific configuration items
+# init.modem.rc (13 modem services: gsm0710muxd/rild/ccci_*/pppd_gprs) is
+# imported again: removing it was part of a de-phone trim that has been
+# reverted.
 import init.mt6592.usb.rc
+import init.modem.rc
+
+# This tablet has no modem. The RIL daemons are declared by init.modem.rc but
+# their binaries (/system/bin/rild, /system/bin/rildmd2) are not part of the
+# shipped blob set, and init restarts a failing service forever - disable them
+# explicitly instead. The remaining modem daemons (gsm0710muxd, muxreport,
+# ccci_*, pppd_gprs, terservice, permission_check) do have their binaries and
+# start and idle as they do on the stock ROM.
+service ril-daemon disabled
+service ril-daemon-md2 disabled
 
 on charger
     mount ext4 /emmc@android /system ro wait
