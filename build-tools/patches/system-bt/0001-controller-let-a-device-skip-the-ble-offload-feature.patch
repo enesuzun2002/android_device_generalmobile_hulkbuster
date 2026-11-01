@@ -1,0 +1,45 @@
+From b1c89f7516f534703fedf3731144cb2fddc4f877 Mon Sep 17 00:00:00 2001
+From: enesuzun2002 <emurat.uzun@gmail.com>
+Date: Sun, 1 Nov 2026 15:28:07 +0300
+Subject: [PATCH] controller: let a device skip the ble offload features query
+
+start_up() sends the vendor-specific "LE Get Vendor Capabilities" command
+(0xFD53) to every controller. A controller that does not implement it
+(e.g. the MediaTek MT6592 combo BT) answers with Command Status 0x01
+(Unknown HCI Command) and never a Command Complete, so AWAIT_COMMAND
+never returns, the controller module start-up hangs and Bluetooth hits
+the enable timeout.
+
+A device can now define BTM_BLE_SKIP_OFFLOAD_FEATURES_QUERY in its
+bdroid_buildcfg.h; offload features are then reported as unsupported.
+
+Change-Id: Ib83ab135e5dde93e6e9976b18c5cdda726e578ff
+---
+ device/src/controller.c | 8 +++++++-
+ 1 file changed, 7 insertions(+), 1 deletion(-)
+
+diff --git a/device/src/controller.c b/device/src/controller.c
+index 60820c2c0..3943c2ade 100644
+--- a/device/src/controller.c
++++ b/device/src/controller.c
+@@ -212,10 +212,16 @@ static future_t *start_up(void) {
+ 
+     page_number++;
+   }
+-#if (BLE_INCLUDED == TRUE)
++#if (BLE_INCLUDED == TRUE) && !defined(BTM_BLE_SKIP_OFFLOAD_FEATURES_QUERY)
+   // read BLE offload features support from controller
+   response = AWAIT_COMMAND(packet_factory->make_ble_read_offload_features_support());
+   packet_parser->parse_ble_read_offload_features_response(response, &ble_offload_features_supported);
++#else
++  // Controllers that do not implement the vendor-specific "LE Get Vendor
++  // Capabilities" command (0xFD53) answer it with a Command Status error
++  // instead of a Command Complete, and AWAIT_COMMAND never returns, which
++  // hangs the controller module start-up until the enable timeout.
++  ble_offload_features_supported = false;
+ #endif
+ #if (SC_MODE_INCLUDED == TRUE)
+   if(ble_offload_features_supported) {
+-- 
+2.56.0
+

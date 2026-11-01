@@ -10,6 +10,7 @@ vendor blob tree:
   frameworks/native            <- from TestMT6572 cm-14.1 (contains
                                   "MediaTek: Fix Graphics")
   packages/apps/Settings       <- from LineageOS cm-14.1
+  system/bt                    <- from LineageOS cm-14.1
 
 Apply:
 
@@ -17,6 +18,7 @@ Apply:
     cd frameworks/base && git am build-tools/patches/frameworks-base/*.patch
     cd frameworks/native && git am build-tools/patches/frameworks-native/*.patch
     cd packages/apps/Settings && git am build-tools/patches/packages-apps-Settings/*.patch
+    cd system/bt && git am build-tools/patches/system-bt/*.patch
 
   0001-main.mk-PRODUCT_PACKAGES_FILTER-hook.patch
       Lets a device tree remove packages from the inherited product
@@ -44,3 +46,11 @@ Apply:
       getApplicationEnabledSetting() for CellBroadcastReceiver inside a
       catch (IllegalArgumentException) - the missing-package case throws
       NameNotFoundException, which was not caught.
+
+  0001-controller-let-a-device-skip-the-ble-offload-feature.patch (system/bt)
+      Bluetooth enable timed out: the stack sends the vendor "LE Get Vendor
+      Capabilities" command (0xFD53) unconditionally, the MT6592 combo
+      firmware answers Command Status 0x01 (Unknown HCI Command) and never
+      a Command Complete, and AWAIT_COMMAND blocks forever (captured with
+      the btsnoop network server). bdroid_buildcfg.h defines
+      BTM_BLE_SKIP_OFFLOAD_FEATURES_QUERY to skip it.
