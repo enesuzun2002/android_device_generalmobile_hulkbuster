@@ -13,8 +13,12 @@ TARGET_CPU_ABI2 := armeabi
 TARGET_CPU_SMP := true
 TARGET_CPU_VARIANT := cortex-a7
 
-# Kernel 
-TARGET_PREBUILT_KERNEL := $(DEVICE_PATH)/kernel
+# Kernel
+TARGET_KERNEL_SOURCE := kernel/mediatek/mt6592
+TARGET_KERNEL_CONFIG := hulkbuster_defconfig
+TARGET_KERNEL_ARCH := arm
+TARGET_KERNEL_HEADER_VERSION := 3
+BOARD_KERNEL_IMAGE_NAME := zImage
 # Matches the known-good 3.10.72 jdct build (see /workspace/unpacked_boot).
 # bootopt/selinux are carried over verbatim from that build for consistency;
 # note the kernel itself contains neither string, so they are inert.
