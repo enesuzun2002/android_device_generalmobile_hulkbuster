@@ -1,7 +1,6 @@
-#include <MtpTypes.h>
+#include <log/log.h>
 #include <system/audio.h>
 #include <utils/StrongPointer.h>
-#include <media/IAudioFlinger.h>
 #include <hardware/audio.h>
 #include <stdlib.h>
 #include <dlfcn.h>

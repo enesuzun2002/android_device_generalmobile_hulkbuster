@@ -14,7 +14,7 @@ LOCAL_SRC_FILES := \
              ssl.cpp \
              mtkplayer.cpp
 
-LOCAL_SHARED_LIBRARIES := libbinder libcutils libutils liblog libicuuc libui libcrypto
+LOCAL_SHARED_LIBRARIES := libbinder libcutils libutils libutilscallstack liblog libicuuc libui libcrypto
 LOCAL_MODULE := libmtk_symbols
 LOCAL_MODULE_TAGS := optional
 

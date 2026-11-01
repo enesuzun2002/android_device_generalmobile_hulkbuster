@@ -5,7 +5,9 @@ LOCAL_PATH := $(call my-dir)
 include $(CLEAR_VARS)
 
 LOCAL_SRC_FILES := mkbootimg.c
-LOCAL_STATIC_LIBRARIES := libmincrypt
+# Pie dropped libmincrypt; SHA-1 comes from BoringSSL.
+LOCAL_STATIC_LIBRARIES := libcrypto_static
+LOCAL_CFLAGS := -Wno-error
 
 LOCAL_MODULE := mtkbootimg
 

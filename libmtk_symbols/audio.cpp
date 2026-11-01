@@ -17,7 +17,11 @@
 
 #include <system/audio.h>
 #include <utils/StrongPointer.h>
-#include <media/IAudioFlinger.h>
+#include <utils/Errors.h>
+#include <sys/types.h>
+#include <binder/IInterface.h>
+#include <binder/IBinder.h>
+#include <binder/Parcel.h>
 #include <hardware/audio.h>
 #include <stdlib.h>
 #include <dlfcn.h>

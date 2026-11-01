@@ -18,11 +18,9 @@ PRODUCT_TAGS += dalvik.gc.type-precise
 
 DEVICE_PACKAGE_OVERLAYS += $(DEVICE_PATH)/overlay
 
-ifeq ($(TARGET_PREBUILT_KERNEL),)
-    LOCAL_KERNEL := $(LOCAL_PATH)/kernel
-else
-    LOCAL_KERNEL := $(TARGET_PREBUILT_KERNEL)
-endif
+# The kernel is built from kernel/mediatek/mt6592 (TARGET_KERNEL_SOURCE); the
+# stock 3.10.72 payload in this directory is kept only as a reference and must
+# not be copied to $(PRODUCT_OUT)/kernel, where the kernel build installs it.
 
 # Symbols
 PRODUCT_PACKAGES += libmtk_symbols
@@ -34,27 +32,54 @@ PRODUCT_PACKAGES += memtrack.mt6592
 # BMG160 gyroscope the blob does not list (see sensors/sensors_wrapper.c).
 PRODUCT_PACKAGES += sensors.hulkbuster
 
-# WebView support libraries.
-#
-# external/chromium-webview was removed from the manifest (it is delivered over
-# git-lfs from review.lineageos.org and the prebuilt_* projects no longer carry
-# a lineage-14.1 branch), so nothing adds these to PRODUCT_PACKAGES any more --
-# frameworks/webview/chromium/chromium.mk, which normally does, is absent from
-# this tree.  But system/core/rootdir/etc/public.libraries.android.txt still
-# lists libwebviewchromium_plat_support.so, and the linker dlopen()s every
-# soname named in /system/etc/public.libraries.txt
-# (system/core/libnativeloader/native_loader.cpp, init_public_namespace()).
-# With the library missing, android_init_namespaces() fails, zygote dies while
-# creating system_server's classloader and system_server never starts.
-#
-# Both modules are built from source by frameworks/webview/chromium/Android.mk
-# and link no chromium code (see the comment at the top of that file).
-PRODUCT_PACKAGES += \
-    libwebviewchromium_loader \
-    libwebviewchromium_plat_support
+# WebView: Pie's core_minimal.mk pulls in webview (external/chromium-webview)
+# and its loader/plat_support libraries; nothing to add here.
 
-# Audio
+# HIDL HALs (Pie). The Lollipop-era legacy blobs are used through the
+# passthrough implementations; services are started by init from the rc files
+# shipped with each -service package. See manifest.xml.
+
+# Graphics: gralloc.mt6592 / hwcomposer.mt6592 (HWC1) behind the HIDL HALs.
 PRODUCT_PACKAGES += \
+    android.hardware.graphics.allocator@2.0-impl \
+    android.hardware.graphics.allocator@2.0-service \
+    android.hardware.graphics.mapper@2.0-impl \
+    android.hardware.graphics.composer@2.1-impl \
+    android.hardware.graphics.composer@2.1-service \
+    android.hardware.configstore@1.0-service \
+    libhwc2on1adapter \
+    libhwc2onfbadapter
+
+# Memtrack, lights, power, sensors, usb, health, thermal-less
+PRODUCT_PACKAGES += \
+    android.hardware.memtrack@1.0-impl \
+    android.hardware.memtrack@1.0-service \
+    android.hardware.light@2.0-impl \
+    android.hardware.light@2.0-service \
+    android.hardware.power@1.0-impl \
+    android.hardware.power@1.0-service \
+    android.hardware.sensors@1.0-impl \
+    android.hardware.sensors@1.0-service \
+    android.hardware.usb@1.0-service \
+    android.hardware.health@2.0-service \
+    android.hardware.keymaster@4.0-service \
+    android.hardware.gnss@1.0-impl \
+    android.hardware.gnss@1.0-service \
+    android.hardware.camera.provider@2.4-impl \
+    android.hardware.camera.provider@2.4-service \
+    android.hardware.drm@1.0-impl \
+    android.hardware.drm@1.0-service \
+    android.hardware.wifi@1.0-service \
+    android.hardware.bluetooth@1.0-impl \
+    android.hardware.bluetooth@1.0-service
+
+# Audio: legacy audio.primary (via the hw module) behind the audio HAL 2.0
+# passthrough. The blob only speaks audio_policy.conf, hence
+# USE_XML_AUDIO_POLICY_CONF := 0.
+PRODUCT_PACKAGES += \
+    android.hardware.audio@2.0-impl \
+    android.hardware.audio@2.0-service \
+    android.hardware.audio.effect@2.0-impl \
     audio.primary.mt6592 \
     audio_policy.default \
     audio.a2dp.default \
@@ -76,6 +101,7 @@ PRODUCT_PACKAGES += libbt-vendor
 # Wifi
 PRODUCT_PACKAGES += \
     lib_driver_cmd_mt66xx \
+    libwifi-hal-mt66xx \
     libwpa_client \
     hostapd \
     wpa_supplicant \
@@ -91,6 +117,9 @@ PRODUCT_COPY_FILES += \
     $(DEVICE_PATH)/configs/agps_profiles_conf2.xml:system/etc/agps_profiles_conf2.xml
 
 # Rootdir
+# No root/ueventd.rc here on purpose: Pie's system/core/rootdir/ueventd.rc
+# provides /dev/hwbinder and /dev/vndbinder permissions; the device-specific
+# rules live in ueventd.mt6592.rc (which also covers /dev/ion).
 PRODUCT_COPY_FILES += \
     $(DEVICE_PATH)/rootdir/enableswap.sh:root/enableswap.sh \
     $(DEVICE_PATH)/rootdir/fstab.mt6592:root/fstab.mt6592 \
@@ -98,12 +127,9 @@ PRODUCT_COPY_FILES += \
     $(DEVICE_PATH)/rootdir/init.mt6592.rc:root/init.mt6592.rc \
     $(DEVICE_PATH)/rootdir/init.mt6592.usb.rc:root/init.mt6592.usb.rc \
     $(DEVICE_PATH)/rootdir/ueventd.mt6592.rc:root/ueventd.mt6592.rc \
-	$(DEVICE_PATH)/rootdir/ueventd.rc:root/ueventd.rc \
-    $(DEVICE_PATH)/rootdir/twrp.fstab:recovery/root/etc/twrp.fstab \
     $(DEVICE_PATH)/rootdir/sbin/poweroff.sh:recovery/root/sbin/poweroff.sh \
     $(DEVICE_PATH)/rootdir/sbin/rebootrecovery.sh:recovery/root/sbin/rebootrecovery.sh \
-    $(DEVICE_PATH)/rootdir/sbin/rebootsystem.sh:recovery/root/sbin/rebootsystem.sh \
-    $(LOCAL_KERNEL):kernel
+    $(DEVICE_PATH)/rootdir/sbin/rebootsystem.sh:recovery/root/sbin/rebootsystem.sh
 
 # On-device diagnostics (mtkdiag.sh + its watch service). Debug-only: it
 # produces a rotating log tree under /data/mtkdiag. Kept enabled (the
@@ -146,10 +172,8 @@ PRODUCT_COPY_FILES += \
 PRODUCT_COPY_FILES += \
     $(DEVICE_PATH)/configs/mtk-kpd.kl:system/usr/keylayout/mtk-kpd.kl
 
-# FM Radio app
-PRODUCT_PACKAGES += \
-    FMRadio \
-    libfmjni
+# FM Radio app: not built on Pie. packages/apps/FMRadio's libfmjni fails with
+# -Werror (unused parameters/variables) and cannot be fixed from the device tree.
 
 # Dalvik heap. The jdct values (48m growth limit, 2m max free) made GC run
 # constantly at 1920x1200, where one full-screen ARGB bitmap is ~9 MB.
@@ -182,16 +206,12 @@ PRODUCT_DEFAULT_PROPERTY_OVERRIDES += persist.sys.usb.config=mtp,adb
 # waits forever for an authorisation that can never arrive, which presents
 # identically to "adbd never started".
 #
-# This has to go through ADDITIONAL_DEFAULT_PROPERTIES (-> /default.prop) rather
-# than PRODUCT_PROPERTY_OVERRIDES (-> /system/build.prop): ro.* properties are
-# write-once, init reads /default.prop before /system/build.prop, and the later
-# write is dropped (the log shows `property_set("ro.secure", "0") failed`).
-#
-# vendor/cm/config/common.mk adds ro.adb.secure=1 during product config, and
-# lineage.mk does that before inheriting this file, so prepending here puts ours
-# first - and build/core/Makefile keeps only the first entry for a given key
-# (uniq-pairs-by-first-component), so ours is the one that survives.
-ADDITIONAL_DEFAULT_PROPERTIES := ro.adb.secure=0 $(ADDITIONAL_DEFAULT_PROPERTIES)
+# On Pie ADDITIONAL_DEFAULT_PROPERTIES is gone; the equivalent is
+# PRODUCT_SYSTEM_DEFAULT_PROPERTIES (-> /system/etc/prop.default). ro.* is
+# write-once, vendor/lineage/config/common.mk appends ro.adb.secure=1 before
+# this file is inherited, and the build keeps only the first entry for a given
+# key, so prepending here makes ours win.
+PRODUCT_SYSTEM_DEFAULT_PROPERTIES := ro.adb.secure=0 $(PRODUCT_SYSTEM_DEFAULT_PROPERTIES)
 
 # AAPT
 PRODUCT_AAPT_CONFIG := normal
