@@ -1,4 +1,6 @@
 Workspace patches that live outside the device/vendor trees.
+PORTING.md explains why each one exists and what to check when moving to
+a newer Android release (it also lists the kernel facts from bring-up).
 
 A fresh checkout of this product needs, beyond this device tree and the
 vendor blob tree:
