@@ -401,6 +401,17 @@ on property:wlan.driver.status=unloaded
 on property:sys.boot_completed=1
     write /proc/bootprof "0"
 
+    # Hotplug governor: bring all four cluster cores up on touch (stock: 2)
+    # and react to sustained load in ~150 ms instead of ~300 ms.
+    write /sys/devices/system/cpu/cpufreq/hotplug/cpu_input_boost_num 4
+    write /sys/devices/system/cpu/cpufreq/hotplug/cpu_up_avg_times 5
+    write /sys/devices/system/cpu/cpufreq/hotplug/up_threshold 80
+
+    # eMMC: deadline has lower latency than cfq for flash; larger readahead
+    # helps app and asset loading.
+    write /sys/block/mmcblk0/queue/scheduler deadline
+    write /sys/block/mmcblk0/queue/read_ahead_kb 512
+
 service p2p_supplicant /system/bin/wpa_supplicant -dd \
     -iwlan0 -Dnl80211 -c/data/misc/wifi/wpa_supplicant.conf \
     -I/system/etc/wifi/wpa_supplicant_overlay.conf \
