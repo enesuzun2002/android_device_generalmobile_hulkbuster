@@ -11,6 +11,7 @@ vendor blob tree:
                                   "MediaTek: Fix Graphics")
   packages/apps/Settings       <- from LineageOS cm-14.1
   system/bt                    <- from LineageOS cm-14.1
+  libcore                      <- from LineageOS cm-14.1
 
 Apply:
 
@@ -19,6 +20,7 @@ Apply:
     cd frameworks/native && git am build-tools/patches/frameworks-native/*.patch
     cd packages/apps/Settings && git am build-tools/patches/packages-apps-Settings/*.patch
     cd system/bt && git am build-tools/patches/system-bt/*.patch
+    cd libcore && git am build-tools/patches/libcore/*.patch
 
   0001-main.mk-PRODUCT_PACKAGES_FILTER-hook.patch
       Lets a device tree remove packages from the inherited product
@@ -54,3 +56,10 @@ Apply:
       a Command Complete, and AWAIT_COMMAND blocks forever (captured with
       the btsnoop network server). bdroid_buildcfg.h defines
       BTM_BLE_SKIP_OFFLOAD_FEATURES_QUERY to skip it.
+
+  0001-X500Name-build-asX500Principal-without-reflection.patch (libcore)
+      Wi-Fi connect soft-reboot: NetworkMonitor's HTTPS probe reaches
+      sun.security.x509.X500Name.asX500Principal(), whose reflective
+      Constructor.newInstance() crashes ART in system_server (SIGSEGV in
+      art::InvokeMethod, fault addr 0x78; same with a wiped dalvik-cache and
+      on both kernels). Uses the public X500Principal(byte[]) constructor.

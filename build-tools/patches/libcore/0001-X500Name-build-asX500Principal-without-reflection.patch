@@ -1,0 +1,45 @@
+From 0d912df4c633e5b3306eb45533d82e3d8b109246 Mon Sep 17 00:00:00 2001
+From: enesuzun2002 <emurat.uzun@gmail.com>
+Date: Sun, 1 Nov 2026 16:14:51 +0300
+Subject: [PATCH] X500Name: build asX500Principal() without reflection
+
+asX500Principal() invoked the package-private X500Principal(X500Name)
+constructor through a cached, setAccessible Constructor. On the MT6592
+hulkbuster build that Constructor.newInstance() crashes ART (SIGSEGV in
+art::InvokeMethod, fault addr 0x78, reproducible with a freshly compiled
+boot image), taking system_server down whenever NetworkMonitor's HTTPS
+probe validates a certificate after Wi-Fi connects.
+
+Use the public X500Principal(byte[]) constructor with this name's DER
+encoding instead; the result is an equivalent principal.
+
+Change-Id: I7910de4d050df621c313a0d9f08742281a58f2e7
+---
+ ojluni/src/main/java/sun/security/x509/X500Name.java | 11 ++++++++---
+ 1 file changed, 8 insertions(+), 3 deletions(-)
+
+diff --git a/ojluni/src/main/java/sun/security/x509/X500Name.java b/ojluni/src/main/java/sun/security/x509/X500Name.java
+index 6fa4a2d..f4e6851 100755
+--- a/ojluni/src/main/java/sun/security/x509/X500Name.java
++++ b/ojluni/src/main/java/sun/security/x509/X500Name.java
+@@ -1435,9 +1435,14 @@ public class X500Name implements GeneralNameInterface, Principal {
+     public X500Principal asX500Principal() {
+         if (x500Principal == null) {
+             try {
+-                Object[] args = new Object[] {this};
+-                x500Principal =
+-                        (X500Principal)principalConstructor.newInstance(args);
++                // Build the principal from the DER encoding through the public
++                // X500Principal(byte[]) constructor instead of reflectively
++                // invoking the package-private X500Principal(X500Name) one:
++                // on the MT6592 hulkbuster build, Constructor.newInstance()
++                // on that cached Constructor crashes ART (SIGSEGV in
++                // art::InvokeMethod, fault addr 0x78) and takes system_server
++                // down during NetworkMonitor's HTTPS probe.
++                x500Principal = new X500Principal(getEncoded());
+             } catch (Exception e) {
+                 throw new RuntimeException("Unexpected exception", e);
+             }
+-- 
+2.56.0
+
