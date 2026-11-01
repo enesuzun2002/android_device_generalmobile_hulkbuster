@@ -69,8 +69,8 @@ sensors/ (sensors.hulkbuster.so) + ro.hardware.sensors=hulkbuster
     with the missing calls (batch/flush/inject) if HIDL refuses it.
     There is no barometer on this tablet.
 
-Kernel (separate repo: android_kernel_mediatek_mt6592, branch hulkbuster-3.10.72)
----------------------------------------------------------------------------------
+Kernel (separate repo: android_kernel_mediatek_mt6592, branch hulkbuster-3.10.108)
+----------------------------------------------------------------------------------
 All values below were recovered from the stock kernel
 (device/generalmobile/hulkbuster/kernel) by disassembly; the tree's DCT
 and board files came from the Panasonic P55 Novo and were wrong.
@@ -96,6 +96,9 @@ and board files came from the Panasonic P55 Novo and were wrong.
       (KPD_PMIC_RSTKEY_MAP). Its unreliability is hardware (stock too).
     - Key backlight = PMIC NLED ISINK0/1/2 via button-backlight.
     - Speaker amp GPIO20, headset switch GPIO121, LED table as stock.
+    - Branch hulkbuster-3.10.108 = hulkbuster-3.10.72 + linux-stable
+      3.10.73..3.10.108, one commit per release (MTK changes kept on
+      conflicts); bisect by release if a regression shows up.
     Android 9 officially wants a newer kernel; booting it on 3.10 needs
     the usual backports (binder, seccomp/filter, cgroup and SELinux bits),
     which are not done here.
