@@ -394,6 +394,13 @@ on property:wlan.driver.status=ok
 on property:wlan.driver.status=unloaded
 	write /dev/wmtWifi "0"
 
+# MTK's framework writes "0" to /proc/bootprof when boot completes; that is
+# what makes the kernel stop mirroring every printk to the debug UART
+# (921600 baud, synchronous, IRQs off - ~1 ms per line). Lineage never
+# does it, so do it here.
+on property:sys.boot_completed=1
+    write /proc/bootprof "0"
+
 service p2p_supplicant /system/bin/wpa_supplicant -dd \
     -iwlan0 -Dnl80211 -c/data/misc/wifi/wpa_supplicant.conf \
     -I/system/etc/wifi/wpa_supplicant_overlay.conf \

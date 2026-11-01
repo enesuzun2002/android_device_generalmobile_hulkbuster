@@ -151,17 +151,17 @@ PRODUCT_PACKAGES += \
     FMRadio \
     libfmjni
 
-# Heap sizes aligned with the known-good 3.10.72 jdct build
-# (blobs/3.10_system_props.txt). This device has 2GB RAM, so the stock
-# tablet-10in-xhdpi values (512m heapsize / 192m growthlimit) are far
-# too aggressive and risk OOM-killing the zygote early in boot.
+# Dalvik heap. The jdct values (48m growth limit, 2m max free) made GC run
+# constantly at 1920x1200, where one full-screen ARGB bitmap is ~9 MB.
+# Between those and tablet-10in-xhdpi-2048 (192m/512m): enough headroom for
+# the launcher/wallpaper without letting one app hog the 2 GB.
 PRODUCT_PROPERTY_OVERRIDES += \
-    dalvik.vm.heapstartsize=5m \
-    dalvik.vm.heapgrowthlimit=48m \
-    dalvik.vm.heapsize=128m \
+    dalvik.vm.heapstartsize=8m \
+    dalvik.vm.heapgrowthlimit=128m \
+    dalvik.vm.heapsize=256m \
     dalvik.vm.heaptargetutilization=0.75 \
     dalvik.vm.heapminfree=512k \
-    dalvik.vm.heapmaxfree=2m
+    dalvik.vm.heapmaxfree=8m
     
 # Media codecs
 PRODUCT_COPY_FILES += \
