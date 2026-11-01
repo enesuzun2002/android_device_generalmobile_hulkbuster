@@ -32,3 +32,7 @@ debug.hwui.render_dirty_regions=false
 config.disable_atlas=1
 
 qemu.hw.mainkeys=1
+
+# Load sensors.hulkbuster.so (the MTK blob + BMG160 gyroscope wrapper) instead
+# of sensors.mt6592.so; hw_get_module checks ro.hardware.<class> first.
+ro.hardware.sensors=hulkbuster

@@ -30,6 +30,10 @@ PRODUCT_PACKAGES += libmtk_symbols
 # Memtrack
 PRODUCT_PACKAGES += memtrack.mt6592
 
+# Sensors: wrapper around the MTK sensors.mt6592.so blob that adds the
+# BMG160 gyroscope the blob does not list (see sensors/sensors_wrapper.c).
+PRODUCT_PACKAGES += sensors.hulkbuster
+
 # WebView support libraries.
 #
 # external/chromium-webview was removed from the manifest (it is delivered over
