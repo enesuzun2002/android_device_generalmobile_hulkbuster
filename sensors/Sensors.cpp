@@ -8,6 +8,7 @@
 #include <poll.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/eventfd.h>
 #include <sys/ioctl.h>
@@ -317,18 +318,32 @@ Return<Result> Sensors::flush(int32_t sensorHandle) {
 
 Return<void> Sensors::poll(int32_t maxCount, poll_cb _hidl_cb) {
     std::vector<Event> out;
-    // SensorDevice::connectHidlService() pokes the HAL with poll(0) right after
-    // connecting and expects an immediate return; blocking here would hang
-    // system_server (WindowManagerService waits for SensorService). Match the
-    // stock HAL: reject maxCount <= 0 without waiting.
+    // There is only ever one real poller, the newest one. An older poll()
+    // can still be blocked here when its caller is gone: the previous
+    // system_server died, or SensorDevice::poll() retried after a HIDL
+    // transport error (it retries every 10 ms). Such a stale call would keep
+    // a HIDL thread forever and could swallow events. So every poll(),
+    // including SensorDevice::connectHidlService()'s poll(0) poke, starts a
+    // new generation and wakes everyone; superseded waiters return empty.
+    // (Exiting instead, like the stock HAL, turns a transport hiccup into a
+    // SensorService abort and a framework restart.)
+    uint64_t myGen;
+    {
+        std::lock_guard<std::mutex> lk(mLock);
+        myGen = ++mPollGen;
+    }
+    mCond.notify_all();
+
+    // The poke itself must return immediately (blocking would hang
+    // system_server, since WindowManagerService waits for SensorService).
     if (maxCount <= 0) {
         _hidl_cb(Result::BAD_VALUE, hidl_vec<Event>(), hidl_vec<SensorInfo>());
         return Void();
     }
     {
         std::unique_lock<std::mutex> lk(mLock);
-        mCond.wait(lk, [this] { return !mQueue.empty(); });
-        int n = std::min<int>(maxCount, (int)mQueue.size());
+        mCond.wait(lk, [this, myGen] { return !mQueue.empty() || mPollGen != myGen; });
+        int n = mPollGen != myGen ? 0 : std::min<int>(maxCount, (int)mQueue.size());
         out.reserve(n);
         for (int i = 0; i < n; i++) {
             Event ev = mQueue.front();
@@ -400,7 +415,7 @@ void Sensors::push(const Event& ev, bool wakeUp) {
             acquireWakeLock();
         }
     }
-    mCond.notify_one();
+    mCond.notify_all();
 }
 
 void Sensors::wake() {

@@ -82,6 +82,7 @@ class Sensors : public ISensors {
 
     // Protected by mLock (event queue)
     std::mutex mLock;
+    uint64_t mPollGen = 0;  // under mLock; see Sensors::poll
     std::condition_variable mCond;
     std::deque<Event> mQueue;
     int mWakeEventsQueued = 0;
