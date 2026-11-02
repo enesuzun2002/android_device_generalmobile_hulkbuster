@@ -1,0 +1,39 @@
+From 5ebad6d6aa316e65308cfb6de87c7595a7a0dba4 Mon Sep 17 00:00:00 2001
+From: enesuzun2002 <emurat.uzun@gmail.com>
+Date: Mon, 2 Nov 2026 13:08:35 +0300
+Subject: [PATCH] X500Name: build asX500Principal() without reflection
+
+Construct the X500Principal from the DER encoding with the public
+X500Principal(byte[]) constructor instead of reflectively invoking the
+package-private X500Principal(X500Name) one. On the MT6592 hulkbuster
+build the reflective Constructor.newInstance() crashes ART (SIGSEGV in
+art::InvokeMethod, fault addr 0x78) and takes system_server down during
+NetworkMonitor's HTTPS probe. Pie port of the 14.1 patch.
+---
+ ojluni/src/main/java/sun/security/x509/X500Name.java | 10 ++++++++--
+ 1 file changed, 8 insertions(+), 2 deletions(-)
+
+diff --git a/ojluni/src/main/java/sun/security/x509/X500Name.java b/ojluni/src/main/java/sun/security/x509/X500Name.java
+index e708837..81fc1f3 100644
+--- a/ojluni/src/main/java/sun/security/x509/X500Name.java
++++ b/ojluni/src/main/java/sun/security/x509/X500Name.java
+@@ -1435,8 +1435,14 @@ public class X500Name implements GeneralNameInterface, Principal {
+     public X500Principal asX500Principal() {
+         if (x500Principal == null) {
+             try {
+-                Object[] args = new Object[] {this};
+-                x500Principal = principalConstructor.newInstance(args);
++                // Build the principal from the DER encoding through the public
++                // X500Principal(byte[]) constructor instead of reflectively
++                // invoking the package-private X500Principal(X500Name) one:
++                // on the MT6592 hulkbuster build, Constructor.newInstance()
++                // on that cached Constructor crashes ART (SIGSEGV in
++                // art::InvokeMethod, fault addr 0x78) and takes system_server
++                // down during NetworkMonitor's HTTPS probe.
++                x500Principal = new X500Principal(getEncoded());
+             } catch (Exception e) {
+                 throw new RuntimeException("Unexpected exception", e);
+             }
+-- 
+2.56.0
+

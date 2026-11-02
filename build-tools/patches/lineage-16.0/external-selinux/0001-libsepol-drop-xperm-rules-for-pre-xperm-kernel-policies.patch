@@ -1,0 +1,77 @@
+From 5bdfc1d1186c587b51b4027f12f16797932c42cd Mon Sep 17 00:00:00 2001
+From: enesuzun2002 <emurat.uzun@gmail.com>
+Date: Mon, 2 Nov 2026 13:08:35 +0300
+Subject: [PATCH] libsepol: drop xperm rules for pre-xperm kernel policies
+
+The MT6592 3.10 kernel loads a policy version without ioctl extended
+permissions. When writing such a kernel policy, skip the allowxperm,
+auditallowxperm and dontauditxperm rules (and fix up the avtab element
+count) instead of failing. The plain ioctl permission rules still apply;
+only the per-command filtering is lost.
+---
+ libsepol/src/write.c | 28 +++++++++++++++++++++++++---
+ 1 file changed, 25 insertions(+), 3 deletions(-)
+
+diff --git a/libsepol/src/write.c b/libsepol/src/write.c
+index 1fb3095..970594a 100644
+--- a/libsepol/src/write.c
++++ b/libsepol/src/write.c
+@@ -98,6 +98,19 @@ static uint16_t spec_order[] = {
+ 	AVTAB_MEMBER
+ };
+ 
++/*
++ * hulkbuster (MT6592, 3.10 kernel): when a kernel policy is written for a
++ * version without ioctl extended permissions, drop the allowxperm/auditallowxperm/
++ * dontauditxperm rules instead of failing. The plain "ioctl" permission rules
++ * still apply; only the per-command filtering is lost.
++ */
++static inline int avtab_skip_xperms(policydb_t * p, avtab_ptr_t cur)
++{
++	return p->policy_type == POLICY_KERN &&
++	       p->policyvers < POLICYDB_VERSION_XPERMS_IOCTL &&
++	       (cur->key.specified & AVTAB_XPERMS);
++}
++
+ static int avtab_write_item(policydb_t * p,
+ 			    avtab_ptr_t cur, struct policy_file *fp,
+ 			    unsigned merge, unsigned commit, uint32_t * nel)
+@@ -112,6 +125,9 @@ static int avtab_write_item(policydb_t * p,
+ 				&& p->policyvers < POLICYDB_VERSION_AVTAB);
+ 	unsigned int i;
+ 
++	if (avtab_skip_xperms(p, cur))
++		return POLICYDB_SUCCESS;
++
+ 	if (oldvers) {
+ 		/* Generate the old avtab format.
+ 		   Requires merging similar entries if uncond avtab. */
+@@ -298,8 +314,13 @@ static int avtab_write(struct policydb *p, avtab_t * a, struct policy_file *fp)
+ 		avtab_reset_merged(a);
+ 		nel = a->nel;
+ 	} else {
+-		/* New avtab format.  nel is good to go. */
+-		nel = cpu_to_le32(a->nel);
++		/* New avtab format.  nel is good to go, minus dropped xperms. */
++		nel = a->nel;
++		for (i = 0; i < a->nslot; i++)
++			for (cur = a->htable[i]; cur; cur = cur->next)
++				if (avtab_skip_xperms(p, cur))
++					nel--;
++		nel = cpu_to_le32(nel);
+ 		items = put_entry(&nel, sizeof(uint32_t), 1, fp);
+ 		if (items != 1)
+ 			return POLICYDB_ERROR;
+@@ -714,7 +735,8 @@ static int cond_write_av_list(policydb_t * p,
+ 
+ 	len = 0;
+ 	for (cur_list = list; cur_list != NULL; cur_list = cur_list->next) {
+-		if (cur_list->node->parse_context)
++		if (cur_list->node->parse_context &&
++		    !avtab_skip_xperms(p, cur_list->node))
+ 			len++;
+ 	}
+ 
+-- 
+2.56.0
+

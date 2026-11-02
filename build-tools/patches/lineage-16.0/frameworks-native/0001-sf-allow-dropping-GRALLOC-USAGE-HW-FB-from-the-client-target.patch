@@ -1,0 +1,49 @@
+From 5586088762852caed53a012d331185366cb120fb Mon Sep 17 00:00:00 2001
+From: enesuzun2002 <emurat.uzun@gmail.com>
+Date: Mon, 2 Nov 2026 13:08:35 +0300
+Subject: [PATCH] sf: allow dropping GRALLOC_USAGE_HW_FB from the client target
+
+The MTK mt6592 gralloc0 blob returns HW_FB buffers whose native_handle
+has no valid fd and refuses to register them, so on Pie they cannot cross
+the allocator/mapper process boundary: the first FramebufferSurface
+allocation fails (NO_RESOURCES), eglMakeCurrent fails with EGL_BAD_ALLOC
+and SurfaceFlinger never composites. With ro.sf.no_hw_fb_usage=true the
+client target is a normal buffer, which the HWC posts itself.
+---
+ .../DisplayHardware/FramebufferSurface.cpp          | 13 ++++++++++---
+ 1 file changed, 10 insertions(+), 3 deletions(-)
+
+diff --git a/services/surfaceflinger/DisplayHardware/FramebufferSurface.cpp b/services/surfaceflinger/DisplayHardware/FramebufferSurface.cpp
+index e6d7834..ef571f5 100644
+--- a/services/surfaceflinger/DisplayHardware/FramebufferSurface.cpp
++++ b/services/surfaceflinger/DisplayHardware/FramebufferSurface.cpp
+@@ -24,6 +24,7 @@
+ #include <stdlib.h>
+ #include <string.h>
+ 
++#include <cutils/properties.h>
+ #include <utils/String8.h>
+ #include <log/log.h>
+ 
+@@ -68,9 +69,15 @@ FramebufferSurface::FramebufferSurface(HWComposer& hwc, int disp,
+ 
+     mName = "FramebufferSurface";
+     mConsumer->setConsumerName(mName);
+-    mConsumer->setConsumerUsageBits(GRALLOC_USAGE_HW_FB |
+-                                       GRALLOC_USAGE_HW_RENDER |
+-                                       GRALLOC_USAGE_HW_COMPOSER);
++    // Legacy gralloc0 blobs (e.g. MTK mt6592) hand out HW_FB buffers whose
++    // native_handle has no valid fd and refuse to register them, so they
++    // cannot cross the allocator/mapper process boundary. On such devices,
++    // render the client target into a normal buffer and let the HWC post it.
++    uint32_t usage = GRALLOC_USAGE_HW_RENDER | GRALLOC_USAGE_HW_COMPOSER;
++    if (!property_get_bool("ro.sf.no_hw_fb_usage", false)) {
++        usage |= GRALLOC_USAGE_HW_FB;
++    }
++    mConsumer->setConsumerUsageBits(usage);
+     const auto& activeConfig = mHwc.getActiveConfig(disp);
+     mConsumer->setDefaultBufferSize(activeConfig->getWidth(),
+             activeConfig->getHeight());
+-- 
+2.56.0
+

@@ -1,0 +1,40 @@
+From c7e387f26cad1d8936bca5f5c703988c0ff89939 Mon Sep 17 00:00:00 2001
+From: enesuzun2002 <emurat.uzun@gmail.com>
+Date: Mon, 2 Nov 2026 13:08:35 +0300
+Subject: [PATCH] controller: let a device skip the LE vendor capabilities
+ query
+
+The MT6592 combo firmware answers HCI 0xFD53 (LE Get Vendor Capabilities)
+with Command Status 0x01 and never a Command Complete, so AWAIT_COMMAND
+blocks and Bluetooth enable times out. When the device defines
+BTM_BLE_SKIP_OFFLOAD_FEATURES_QUERY (bdroid_buildcfg.h), assume no BLE
+offload features. Pie port of the 14.1 patch.
+---
+ device/src/controller.cc | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/device/src/controller.cc b/device/src/controller.cc
+index 2cf024f..4f37684 100644
+--- a/device/src/controller.cc
++++ b/device/src/controller.cc
+@@ -176,9 +176,17 @@ static future_t* start_up(void) {
+     page_number++;
+   }
+ 
++#if !defined(BTM_BLE_SKIP_OFFLOAD_FEATURES_QUERY)
+   // read BLE offload features support from controller
+   response = AWAIT_COMMAND(packet_factory->make_ble_read_offload_features_support());
+   packet_parser->parse_ble_read_offload_features_response(response, &ble_offload_features_supported);
++#else
++  // Controllers that do not implement the vendor-specific "LE Get Vendor
++  // Capabilities" command (0xFD53) answer it with a Command Status error
++  // instead of a Command Complete, and AWAIT_COMMAND never returns, which
++  // hangs the controller module start-up until the enable timeout.
++  ble_offload_features_supported = false;
++#endif
+ #if (SC_MODE_INCLUDED == TRUE)
+   if(ble_offload_features_supported) {
+     secure_connections_supported =
+-- 
+2.56.0
+

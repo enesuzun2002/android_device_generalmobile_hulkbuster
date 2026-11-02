@@ -1,0 +1,37 @@
+From 6832c96b5be4431b3feeb81167817664691db285 Mon Sep 17 00:00:00 2001
+From: enesuzun2002 <emurat.uzun@gmail.com>
+Date: Mon, 2 Nov 2026 13:08:35 +0300
+Subject: [PATCH] kernel: only match CONFIG_*=m lines when detecting modules
+
+The module check grepped the kernel config for '=m', which also matches
+string options such as CONFIG_CMDLINE values, and wrongly enabled the
+modules build for this all-built-in kernel. Match only tristate
+CONFIG_*=m lines.
+---
+ build/tasks/kernel.mk | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/build/tasks/kernel.mk b/build/tasks/kernel.mk
+index e5e5960..d021799 100644
+--- a/build/tasks/kernel.mk
++++ b/build/tasks/kernel.mk
+@@ -237,14 +237,14 @@ TARGET_KERNEL_BINARIES: $(KERNEL_CONFIG)
+ 			echo "Building DTBs"; \
+ 			$(call make-kernel-target,dtbs); \
+ 		fi
+-	$(hide) if grep -q '=m' $(KERNEL_CONFIG); then \
++	$(hide) if grep -q '^CONFIG_[A-Z0-9_]*=m' $(KERNEL_CONFIG); then \
+ 			echo "Building Kernel Modules"; \
+ 			$(call make-kernel-target,modules); \
+ 		fi
+ 
+ .PHONY: INSTALLED_KERNEL_MODULES
+ INSTALLED_KERNEL_MODULES: depmod-host
+-	$(hide) if grep -q '=m' $(KERNEL_CONFIG); then \
++	$(hide) if grep -q '^CONFIG_[A-Z0-9_]*=m' $(KERNEL_CONFIG); then \
+ 			echo "Installing Kernel Modules"; \
+ 			$(call make-kernel-target,INSTALL_MOD_PATH=$(MODULES_INTERMEDIATES) modules_install); \
+ 			kernel_release=$$(cat $(KERNEL_RELEASE)) \
+-- 
+2.56.0
+
