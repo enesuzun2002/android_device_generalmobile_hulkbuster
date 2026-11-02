@@ -45,3 +45,7 @@ ro.audio.skip_legacy_dump=true
 debug.sf.latch_unsignaled=1
 sys.use_fifo_ui=1
 debug.hwui.use_buffer_age=false
+
+# The rear camera borrows the OV8858 feature table for its AF modes; hide
+# the upscaled picture sizes above the 5 MP S5K4E1GA.
+ro.vendor.camera0.max_picture_size=2560x1920

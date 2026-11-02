@@ -69,17 +69,17 @@ TARGET_OTA_ASSERT_DEVICE := etab5,ETAB5,E-TAB5,E-Tab5,hulkbuster
 # listed more than once. libmtk_atomic provides android_atomic_*, which Pie's
 # libcutils no longer exports; libmtk_xlog provides __xlog_buf_printf;
 # libmtk_gui the L-era libgui symbols used by libgui_ext.
+# libmtk_camera the L-era GraphicBuffer/GraphicBufferMapper ABI, CamExif and
+# MtkCameraParameters statics for the camera HAL blobs.
 TARGET_LD_SHIM_LIBS := \
     /system/lib/libui_ext.so|libmtk_symbols.so \
     /system/lib/libgui_ext.so|libmtk_symbols.so \
     /system/lib/hw/hwcomposer.mt6592.so|libmtk_symbols.so \
     /system/lib/libMtkOmxCore.so|libmtk_symbols.so \
-    /system/lib/libmtkplayer.so|libmtk_symbols.so \
     /system/lib/hw/gps.mt6592.so|libmtk_symbols.so \
     /system/lib/libmnl.so|libmtk_symbols.so \
     /system/lib/libaudioflinger.so|libmtk_symbols.so \
     /system/lib/libaudio.primary.default.so|libmtk_symbols.so \
-    /system/lib/hw/camera.default.so|libmtk_symbols.so \
     /system/lib/egl/libGLES_android.so|libmtk_atomic.so \
     /system/lib/hw/hwcomposer.mt6592.so|libmtk_atomic.so \
     /system/lib/libClearMotionFW.so|libmtk_atomic.so \
@@ -98,7 +98,6 @@ TARGET_LD_SHIM_LIBS := \
     /system/lib/libcam.client.so|libmtk_atomic.so \
     /system/lib/libcam_utils.so|libmtk_atomic.so \
     /system/lib/libcamdrv.so|libmtk_atomic.so \
-    /system/lib/libcorkscrew.so|libmtk_atomic.so \
     /system/lib/libfeatureio.so|libmtk_atomic.so \
     /system/lib/libgpu_aux.so|libmtk_atomic.so \
     /system/lib/libgui_ext.so|libmtk_atomic.so \
@@ -109,11 +108,16 @@ TARGET_LD_SHIM_LIBS := \
     /system/lib/libvcodecdrv.so|libmtk_atomic.so \
     /system/lib/libMali.so|libutilscallstack.so \
     /system/lib/libgui_ext.so|libmtk_gui.so \
-    /system/bin/dualmdlogger|libmtk_xlog.so \
-    /system/bin/emcsmdlogger|libmtk_xlog.so \
-    /system/bin/factory|libmtk_xlog.so \
-    /system/bin/ipod|libmtk_xlog.so \
-    /system/bin/mdlogger|libmtk_xlog.so \
+    /system/lib/hw/camera.mt6592.so|libmtk_camera.so \
+    /system/lib/libcam.utils.sensorlistener.so|libmtk_camera.so \
+    /system/lib/libcam_utils.so|libmtk_camera.so \
+    /system/lib/libmtk_mmutils.so|libmtk_camera.so \
+    /system/lib/libcam.client.so|libmtk_camera.so \
+    /system/lib/libcam.camadapter.so|libmtk_camera.so \
+    /system/lib/libcam.device1.so|libmtk_camera.so \
+    /system/lib/libcam.paramsmgr.so|libmtk_camera.so \
+    /system/lib/libMtkOmxVdec.so|libmtk_camera.so \
+    /system/lib/libMtkOmxVenc.so|libmtk_camera.so \
     /system/bin/thermal|libmtk_xlog.so \
     /system/bin/thermald|libmtk_xlog.so \
     /system/lib/lib3a.so|libmtk_xlog.so \
@@ -153,24 +157,20 @@ TARGET_LD_SHIM_LIBS := \
     /system/lib/libcamdrv.so|libmtk_xlog.so \
     /system/lib/libcameracustom.so|libmtk_xlog.so \
     /system/lib/libdpframework.so|libmtk_xlog.so \
-    /system/lib/libdrmmtkutil.so|libmtk_xlog.so \
     /system/lib/libfeatureio.so|libmtk_xlog.so \
     /system/lib/libgifEncoder_jni.so|libmtk_xlog.so \
     /system/lib/libimageio.so|libmtk_xlog.so \
     /system/lib/libimageio_plat_drv.so|libmtk_xlog.so \
-    /system/lib/libmdloggerrecycle.so|libmtk_xlog.so \
     /system/lib/libmjc.so|libmtk_xlog.so \
     /system/lib/libmp4enc_sa.ca7.so|libmtk_xlog.so \
     /system/lib/libmpo.so|libmtk_xlog.so \
     /system/lib/libmpodecoder.so|libmtk_xlog.so \
     /system/lib/libmpoencoder.so|libmtk_xlog.so \
     /system/lib/libmpojni.so|libmtk_xlog.so \
-    /system/lib/libshowlogo.so|libmtk_xlog.so \
     /system/lib/libvc1dec_sa.ca7.so|libmtk_xlog.so \
     /system/lib/libvcodec_utility.so|libmtk_xlog.so \
     /system/lib/libvcodecdrv.so|libmtk_xlog.so \
     /system/lib/libvp8dec_sa.ca7.so|libmtk_xlog.so \
-    /system/xbin/BGW|libmtk_xlog.so \
     /system/xbin/mnld|libmtk_xlog.so
 
 # MTK hardware

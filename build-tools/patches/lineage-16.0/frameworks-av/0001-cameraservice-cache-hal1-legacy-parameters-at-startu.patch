@@ -1,0 +1,62 @@
+From c5961dd3064990e01abd99fe3dd14deaf41f8c97 Mon Sep 17 00:00:00 2001
+From: enesuzun2002 <emurat.uzun@gmail.com>
+Date: Mon, 2 Nov 2026 18:17:31 +0300
+Subject: [PATCH] cameraservice: cache hal1 legacy parameters at startup
+
+CameraService fetched a HAL1 camera's legacy parameters lazily by
+opening it as cameraserver, evicting any camera an app had open (HAL1
+can open only one). Fetch them for every HAL1 camera at startup.
+
+Change-Id: I40edd729c267df3fc8fb9189b56cffd6016b81fa
+---
+ .../camera/libcameraservice/CameraService.cpp | 27 +++++++++++++++++++
+ 1 file changed, 27 insertions(+)
+
+diff --git a/services/camera/libcameraservice/CameraService.cpp b/services/camera/libcameraservice/CameraService.cpp
+index 550be4a..24a4926 100644
+--- a/services/camera/libcameraservice/CameraService.cpp
++++ b/services/camera/libcameraservice/CameraService.cpp
+@@ -23,6 +23,7 @@
+ #include <stdio.h>
+ #include <cstring>
+ #include <ctime>
++#include <thread>
+ #include <string>
+ #include <sys/types.h>
+ #include <inttypes.h>
+@@ -144,6 +145,32 @@ void CameraService::onFirstRef()
+ 
+     mUidPolicy = new UidPolicy(this);
+     mUidPolicy->registerSelf();
++
++    // HAL1 devices: CameraService fetches a camera's legacy parameters lazily
++    // by opening it as "cameraserver", which evicts whatever camera an app has
++    // open at that moment (HAL1 can only open one). Apps that open the back
++    // camera before querying the front one then lose their session. Fetch the
++    // parameters of every HAL1 camera once now, while nothing is open.
++    sp<CameraService> self = this;
++    std::thread([self]() {
++        std::vector<std::string> ids;
++        {
++            Mutex::Autolock l(self->mServiceLock);
++            if (self->mCameraProviderManager == nullptr) return;
++            ids = self->mCameraProviderManager->getCameraDeviceIds();
++        }
++        for (auto& id : ids) {
++            hardware::hidl_version version(0, 0);
++            if (self->mCameraProviderManager->getHighestSupportedVersion(id, &version) != OK ||
++                    version.get_major() != 1) {
++                continue;
++            }
++            CameraParameters params;
++            Status ret = self->getLegacyParametersLazy(atoi(id.c_str()), &params);
++            ALOGI("Cached HAL1 legacy parameters of camera %s: %s", id.c_str(),
++                    ret.isOk() ? "ok" : ret.toString8().string());
++        }
++    }).detach();
+ }
+ 
+ status_t CameraService::enumerateProviders() {
+-- 
+2.56.0
+

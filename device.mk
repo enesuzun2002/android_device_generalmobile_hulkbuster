@@ -23,7 +23,7 @@ DEVICE_PACKAGE_OVERLAYS += $(DEVICE_PATH)/overlay
 # not be copied to $(PRODUCT_OUT)/kernel, where the kernel build installs it.
 
 # Symbols
-PRODUCT_PACKAGES += libmtk_symbols libmtk_atomic libmtk_xlog libmtk_gui
+PRODUCT_PACKAGES += libmtk_symbols libmtk_atomic libmtk_xlog libmtk_gui libmtk_camera libskia
 
 # Sensors: native ISensors@1.0 service (sensors/) talking to the kernel hwmsen
 # framework directly; replaces the closed sensors.mt6592.so blob (HAL 1.1),

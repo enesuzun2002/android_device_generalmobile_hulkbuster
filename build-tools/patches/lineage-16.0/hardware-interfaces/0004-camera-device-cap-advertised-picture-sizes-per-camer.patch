@@ -1,0 +1,120 @@
+From c2123583ccc7faf7b2b2b05e160c46d7c9ca387e Mon Sep 17 00:00:00 2001
+From: enesuzun2002 <emurat.uzun@gmail.com>
+Date: Mon, 2 Nov 2026 21:32:26 +0300
+Subject: [PATCH 4/4] camera: device: cap advertised picture sizes per camera
+
+Some HAL1 blobs carry a feature table from another sensor and list
+picture sizes the sensor only reaches by upscaling. When
+ro.vendor.camera<id>.max_picture_size=WxH is set, hide larger sizes in
+getParameters() and clamp picture-size in both directions.
+
+Change-Id: Iead6c086dfeceaca0378d7f845a929ec519475e5
+---
+ camera/device/1.0/default/CameraDevice.cpp | 70 +++++++++++++++++++++-
+ 1 file changed, 68 insertions(+), 2 deletions(-)
+
+diff --git a/camera/device/1.0/default/CameraDevice.cpp b/camera/device/1.0/default/CameraDevice.cpp
+index b8fba75..c6585e5 100644
+--- a/camera/device/1.0/default/CameraDevice.cpp
++++ b/camera/device/1.0/default/CameraDevice.cpp
+@@ -19,6 +19,9 @@
+ #include <hardware/gralloc1.h>
+ #include <hidlmemory/mapping.h>
+ #include <log/log.h>
++#include <cutils/properties.h>
++#include <stdio.h>
++#include <string>
+ #include <utils/Trace.h>
+ 
+ #include <media/hardware/HardwareAPI.h> // For VideoNativeHandleMetadata
+@@ -1084,6 +1087,68 @@ Return<Status> CameraDevice::cancelPicture() {
+     return Status::ILLEGAL_ARGUMENT;
+ }
+ 
++/*
++ * Some HAL1 blobs ship a feature table from another sensor and advertise
++ * picture sizes the sensor can only reach by upscaling. When
++ * ro.vendor.camera<id>.max_picture_size=WxH is set, hide every size larger
++ * than that and clamp picture-size to the largest one left.
++ */
++static bool getMaxPictureSize(const std::string& cameraId, int* maxW, int* maxH) {
++    char key[64];  // PROPERTY_KEY_MAX (32) is too short for this name
++    char val[PROPERTY_VALUE_MAX];
++    snprintf(key, sizeof(key), "ro.vendor.camera%s.max_picture_size", cameraId.c_str());
++    if (property_get(key, val, "") <= 0) return false;
++    return sscanf(val, "%dx%d", maxW, maxH) == 2 && *maxW > 0 && *maxH > 0;
++}
++
++static std::string getParam(const std::string& params, const std::string& key, size_t* pos, size_t* len) {
++    std::string needle = key + "=";
++    size_t p = 0;
++    while ((p = params.find(needle, p)) != std::string::npos) {
++        if (p == 0 || params[p - 1] == ';') break;
++        p += needle.size();
++    }
++    if (p == std::string::npos) return std::string();
++    size_t start = p + needle.size();
++    size_t end = params.find(';', start);
++    if (end == std::string::npos) end = params.size();
++    if (pos) *pos = start;
++    if (len) *len = end - start;
++    return params.substr(start, end - start);
++}
++
++static std::string limitPictureSizes(const std::string& params, const std::string& cameraId) {
++    int maxW, maxH;
++    if (!getMaxPictureSize(cameraId, &maxW, &maxH)) return params;
++    std::string out = params;
++    size_t pos, len;
++    std::string values = getParam(out, "picture-size-values", &pos, &len);
++    int bestW = 0, bestH = 0;
++    if (!values.empty()) {
++        std::string kept;
++        size_t s = 0;
++        while (s <= values.size()) {
++            size_t e = values.find(',', s);
++            if (e == std::string::npos) e = values.size();
++            std::string item = values.substr(s, e - s);
++            int w, h;
++            if (sscanf(item.c_str(), "%dx%d", &w, &h) == 2 && w <= maxW && h <= maxH) {
++                if (!kept.empty()) kept += ",";
++                kept += item;
++                if ((long)w * h > (long)bestW * bestH) { bestW = w; bestH = h; }
++            }
++            s = e + 1;
++        }
++        if (!kept.empty()) out.replace(pos, len, kept);
++    }
++    std::string cur = getParam(out, "picture-size", &pos, &len);
++    int w, h;
++    if (bestW > 0 && sscanf(cur.c_str(), "%dx%d", &w, &h) == 2 && (w > maxW || h > maxH)) {
++        out.replace(pos, len, std::to_string(bestW) + "x" + std::to_string(bestH));
++    }
++    return out;
++}
++
+ Return<Status> CameraDevice::setParameters(const hidl_string& params) {
+     ALOGV("%s(%s)", __FUNCTION__, mCameraId.c_str());
+     Mutex::Autolock _l(mLock);
+@@ -1092,7 +1157,8 @@ Return<Status> CameraDevice::setParameters(const hidl_string& params) {
+         return Status::OPERATION_NOT_SUPPORTED;
+     }
+     if (mDevice->ops->set_parameters) {
+-        return getHidlStatus(mDevice->ops->set_parameters(mDevice, params.c_str()));
++        std::string limited = limitPictureSizes(std::string(params.c_str()), mCameraId);
++        return getHidlStatus(mDevice->ops->set_parameters(mDevice, limited.c_str()));
+     }
+     return Status::ILLEGAL_ARGUMENT;
+ }
+@@ -1108,7 +1174,7 @@ Return<void> CameraDevice::getParameters(getParameters_cb _hidl_cb) {
+     }
+     if (mDevice->ops->get_parameters) {
+         char *temp = mDevice->ops->get_parameters(mDevice);
+-        outStr = temp;
++        outStr = limitPictureSizes(std::string(temp ? temp : ""), mCameraId);
+         if (mDevice->ops->put_parameters) {
+             mDevice->ops->put_parameters(mDevice, temp);
+         } else {
+-- 
+2.56.0
+

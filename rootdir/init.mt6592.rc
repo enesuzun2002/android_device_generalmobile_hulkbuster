@@ -456,6 +456,9 @@ service iprenew_p2p /system/bin/dhcpcd -n
     oneshot
 
 service drvbd /system/bin/drvbd
+    # MTK DRVB anti-tamper daemon. The camera blobs (libJpgEncPipe) query it
+    # and crash on purpose without it; the shipped binary is patched so a
+    # failed check no longer stops the SoC clocks (CLK_CFG_0).
     class main
     user root
     group root
@@ -535,6 +538,18 @@ service vendor.bluetooth-1-0 /vendor/bin/hw/android.hardware.bluetooth@1.0-servi
     user bluetooth
     group bluetooth radio
     writepid /dev/stune/foreground/tasks
+
+# The MTK camera HAL keeps its calibration/3A tables in
+# /data/nvram/APCFG/APRDCL (media:system 0770); as plain cameraserver it
+# cannot create them and falls back to defaults. Add the system group.
+service vendor.camera-provider-2-4 /vendor/bin/hw/android.hardware.camera.provider@2.4-service
+    override
+    class hal
+    user cameraserver
+    group audio camera input drmrpc system
+    ioprio rt 4
+    capabilities SYS_NICE
+    writepid /dev/cpuset/camera-daemon/tasks /dev/stune/top-app/tasks
 
 service mnld /system/xbin/mnld
     class main

@@ -49,3 +49,29 @@ LOCAL_MODULE := libmtk_gui
 LOCAL_MODULE_TAGS := optional
 
 include $(BUILD_SHARED_LIBRARY)
+
+# Lollipop-era MTK camera HAL ABI (GraphicBuffer ctors, GraphicBufferMapper
+# int-usage overloads, MtkCameraParameters::APP_MODE_NAME_MTK_S3D, 2-arg
+# CamExif::appendDebugExif). Shimmed into the camera blobs only.
+include $(CLEAR_VARS)
+
+LOCAL_SRC_FILES := camera.cpp
+LOCAL_SHARED_LIBRARIES := libui libutils liblog libsensor
+LOCAL_MODULE := libmtk_camera
+LOCAL_MODULE_TAGS := optional
+
+include $(BUILD_SHARED_LIBRARY)
+
+# Empty libskia.so: the MTK camera blobs list it as DT_NEEDED but import no
+# Skia symbol from it. Pie has no system libskia.so (Skia is linked into
+# libhwui; the Soong "libskia" module is a static library only), so the
+# dependency just has to be satisfiable. An Android.mk library cannot set a
+# module stem and Soong has no `stem` here, hence the module name must be the
+# file name.
+include $(CLEAR_VARS)
+
+LOCAL_SRC_FILES := skia_stub.c
+LOCAL_MODULE := libskia
+LOCAL_MODULE_TAGS := optional
+
+include $(BUILD_SHARED_LIBRARY)

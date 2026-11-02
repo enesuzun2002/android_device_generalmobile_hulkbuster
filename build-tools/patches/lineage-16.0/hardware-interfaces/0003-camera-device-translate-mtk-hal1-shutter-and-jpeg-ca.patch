@@ -1,0 +1,97 @@
+From bf74067996d6decf06de1b9d3e6453a24740ad2a Mon Sep 17 00:00:00 2001
+From: enesuzun2002 <emurat.uzun@gmail.com>
+Date: Mon, 2 Nov 2026 21:32:26 +0300
+Subject: [PATCH 3/4] camera: device: translate mtk hal1 shutter and jpeg
+ callbacks
+
+MediaTek's HAL1 delivers the shutter as notify 0x40000000 (ext1 0x11)
+and the JPEG as data 0x80000000 with an 8-byte MTK header in front of
+it. AOSP cameraserver ignores both, so the shutter never fired and no
+photo was saved. Map them to CAMERA_MSG_SHUTTER and
+CAMERA_MSG_COMPRESSED_IMAGE (header stripped); drop other MTK ext data.
+
+Change-Id: I1cb84a80c7ae44c1dee9ff6d0031fd314d278b7d
+---
+ camera/device/1.0/default/CameraDevice.cpp | 59 ++++++++++++++++++++++
+ 1 file changed, 59 insertions(+)
+
+diff --git a/camera/device/1.0/default/CameraDevice.cpp b/camera/device/1.0/default/CameraDevice.cpp
+index 0170b34..b8fba75 100644
+--- a/camera/device/1.0/default/CameraDevice.cpp
++++ b/camera/device/1.0/default/CameraDevice.cpp
+@@ -439,6 +439,19 @@ void CameraDevice::sPutMemory(camera_memory_t *data) {
+ void CameraDevice::sNotifyCb(int32_t msg_type, int32_t ext1, int32_t ext2, void *user) {
+     ALOGV("%s", __FUNCTION__);
+     CameraDevice* object = static_cast<CameraDevice*>(user);
++    // hulkbuster (MT6592) local patch: MediaTek's HAL1 delivers the shutter event as
++    // msg_type MTK_CAMERA_MSG_EXT_NOTIFY (0x40000000) with ext1 = 0x11
++    // (MTK_CAMERA_MSG_EXT_NOTIFY_SHUTTER; see NSMtkDefaultCamAdapter::onCB_Shutter in
++    // libcam.camadapter.so). Map it to a plain CAMERA_MSG_SHUTTER so the camera2 legacy
++    // shim can complete the capture; drop every other MTK ext notify (e.g. 0x10 capture done).
++    if ((uint32_t) msg_type == 0x40000000u) {
++        if (ext1 != 0x11) {
++            return;
++        }
++        msg_type = CAMERA_MSG_SHUTTER;
++        ext1 = 0;
++        ext2 = 0;
++    }
+     if (object->mDeviceCallback != nullptr) {
+         object->mDeviceCallback->notifyCallback((NotifyCallbackMsg) msg_type, ext1, ext2);
+     }
+@@ -454,6 +467,52 @@ void CameraDevice::sDataCb(int32_t msg_type, const camera_memory_t *data, unsign
+              index, mem->mNumBufs);
+         return;
+     }
++
++    // hulkbuster (MT6592) local patch: MediaTek's HAL1 does not deliver the JPEG as a
++    // plain CAMERA_MSG_COMPRESSED_IMAGE. It sends msg_type MTK_CAMERA_MSG_EXT_DATA
++    // (0x80000000) with a buffer laid out as
++    //   [uint32 extMsgType][uint32 callback index][EXIF header (SOI+APP1..)][JPEG bitstream]
++    // (extMsgType 0x10 == MTK_CAMERA_MSG_EXT_DATA_COMPRESSED_IMAGE; verified in
++    // libcam.camadapter.so NSMtkDefaultCamAdapter::onCB_CompressedImage and matching the
++    // CyanogenMod android_frameworks_av MTK CameraClient patch eb994da). Repack just the JPEG
++    // payload into a fresh camera memory and forward it as CAMERA_MSG_COMPRESSED_IMAGE.
++    // All other MTK ext data types are dropped since AOSP cameraserver can't interpret them.
++    if ((uint32_t) msg_type == 0x80000000u) {
++        const uint32_t kMtkExtDataCompressedImage = 0x10;
++        const size_t kMtkExtHdrSize = 2 * sizeof(uint32_t);
++        if (object == nullptr) object = sCallbackDevice;
++        const uint8_t* src = static_cast<const uint8_t*>(mem->mHidlHeapMemData) +
++                index * mem->mBufSize;
++        if (object == nullptr || object->mDeviceCallback == nullptr ||
++                mem->mBufSize < kMtkExtHdrSize) {
++            return;
++        }
++        uint32_t extType = 0;
++        memcpy(&extType, src, sizeof(extType));
++        if (extType != kMtkExtDataCompressedImage) {
++            ALOGV("%s: dropping MTK ext data type 0x%x", __FUNCTION__, extType);
++            return;
++        }
++        size_t jpegSize = mem->mBufSize - kMtkExtHdrSize;
++        camera_memory_t* jpeg = sGetMemory(-1, jpegSize, 1, object);
++        if (jpeg == nullptr) {
++            ALOGE("%s: failed to allocate %zu bytes for MTK JPEG", __FUNCTION__, jpegSize);
++            return;
++        }
++        memcpy(jpeg->data, src + kMtkExtHdrSize, jpegSize);
++        ALOGI("%s: MTK compressed image -> CAMERA_MSG_COMPRESSED_IMAGE, %zu bytes", __FUNCTION__,
++                jpegSize);
++        CameraFrameMetadata emptyMetadata;
++        CameraHeapMemory* jpegMem = static_cast<CameraHeapMemory*>(jpeg->handle);
++        // dataCallback is a synchronous HIDL call; cameraserver holds its own reference to
++        // the mapped heap, so the registration can be dropped right afterwards.
++        object->mDeviceCallback->dataCallback(
++                (DataCallbackMsg) CAMERA_MSG_COMPRESSED_IMAGE, jpegMem->handle.mId, 0,
++                emptyMetadata);
++        sPutMemory(jpeg);
++        return;
++    }
++
+ #ifdef QTI_CAMERA_DEVICE
+     if(object->mQDeviceCallback != nullptr) {
+          vendor::qti::hardware::camera::device::V1_0::QCameraFrameMetadata hidlMetadata;
+-- 
+2.56.0
+
