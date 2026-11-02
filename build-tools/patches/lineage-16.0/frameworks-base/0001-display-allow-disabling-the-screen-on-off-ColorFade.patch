@@ -1,0 +1,43 @@
+From d4ede3ed08daa567d020c576b66aef7545dcfab6 Mon Sep 17 00:00:00 2001
+From: enesuzun2002 <emurat.uzun@gmail.com>
+Date: Mon, 2 Nov 2026 15:11:02 +0300
+Subject: [PATCH] display: allow disabling the screen on/off ColorFade
+
+With ro.config.disable_color_fade=true, DisplayPowerController skips
+ColorFade, the same path low-RAM devices use. ColorFade renders a frame
+with GLES inside system_server, and the MT6592 libMali crashes in
+eglMakeCurrent there (SIGSEGV, fault addr 0x14 in the PowerManagerService
+thread), taking the framework down every time the screen turns off.
+---
+ .../android/server/display/DisplayPowerController.java    | 8 +++++++-
+ 1 file changed, 7 insertions(+), 1 deletion(-)
+
+diff --git a/services/core/java/com/android/server/display/DisplayPowerController.java b/services/core/java/com/android/server/display/DisplayPowerController.java
+index af425708..fa20da5e 100644
+--- a/services/core/java/com/android/server/display/DisplayPowerController.java
++++ b/services/core/java/com/android/server/display/DisplayPowerController.java
+@@ -41,6 +41,7 @@ import android.os.Message;
+ import android.os.PowerManager;
+ import android.os.RemoteException;
+ import android.os.SystemClock;
++import android.os.SystemProperties;
+ import android.os.Trace;
+ import android.os.UserHandle;
+ import android.provider.Settings;
+@@ -482,7 +483,12 @@ final class DisplayPowerController implements AutomaticBrightnessController.Call
+             }
+         }
+ 
+-        mColorFadeEnabled = !ActivityManager.isLowRamDeviceStatic();
++        // ro.config.disable_color_fade: the screen on/off ColorFade renders a
++        // frame with GLES inside system_server; some legacy GPU drivers (MTK
++        // mt6592 libMali) crash in eglMakeCurrent there and take the
++        // framework down every time the screen turns off.
++        mColorFadeEnabled = !ActivityManager.isLowRamDeviceStatic()
++                && !SystemProperties.getBoolean("ro.config.disable_color_fade", false);
+         mColorFadeFadesConfig = resources.getBoolean(
+                 com.android.internal.R.bool.config_animateScreenLights);
+ 
+-- 
+2.56.0
+

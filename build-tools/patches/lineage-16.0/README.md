@@ -48,3 +48,10 @@ frameworks-native/0001-sf-allow-dropping-GRALLOC-USAGE-HW-FB-from-the-client-tar
     current"; device stuck on the boot logo). With
     ro.sf.no_hw_fb_usage=true (system.prop) the client target is a
     normal ion buffer that hwcomposer.mt6592 posts itself.
+
+frameworks-base/0001-display-allow-disabling-the-screen-on-off-ColorFade.patch
+    The screen on/off ColorFade draws with GLES inside system_server, and
+    libMali crashes in eglMakeCurrent there (PowerManagerService thread),
+    so every screen-off killed the framework and left the button lights on.
+    With ro.config.disable_color_fade=true (system.prop) DisplayPowerController
+    takes the low-RAM path and skips the animation.
