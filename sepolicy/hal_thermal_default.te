@@ -1,0 +1,4 @@
+# Native thermal HAL: reads /sys/class/thermal (MTK zones, unlabeled => sysfs)
+# and per-core load from /proc/stat.
+r_dir_file(hal_thermal_default, sysfs)
+allow hal_thermal_default proc_stat:file r_file_perms;

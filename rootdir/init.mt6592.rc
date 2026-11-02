@@ -479,14 +479,21 @@ service NvRAMAgent /system/bin/nvram_agent_binder
      group system nvram
 
 service thermal_manager /system/bin/thermal_manager
+    # loads /etc/.tp/thermal.conf into the MTK thermal zones (enables polling
+    # and CPU throttling); without a class it never ran on Pie
+    class main
     user root
     oneshot
 
 service thermal /system/bin/thermal
+    # MTK network throttle daemon: needs ifc_set_throttle from the MTK
+    # libnetutils, which Pie's does not have, so it can only crash-loop
+    disabled
     user system
     group system
 
 service thermald /system/bin/thermald
+    class main
     user system
     group system
 
