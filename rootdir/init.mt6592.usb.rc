@@ -4,6 +4,19 @@ on init
     write /sys/class/android_usb/android0/iSerial ${ro.serialno}
     write /sys/class/android_usb/android0/idVendor 0BB4
 
+    # Pie's adbd only speaks FunctionFS (the legacy /dev/android_adb path was
+    # removed from adbd) and only listens on USB if /dev/usb-ffs/adb/ep0
+    # exists.  android.c in this 3.10 kernel already embeds f_fs.c; the
+    # "aliases" file makes the name "adb" in sys.usb.config map to the ffs
+    # function instead of the legacy f_adb.  Must be written while the
+    # gadget is disabled, i.e. before any 'functions'/'enable' write.
+    mkdir /dev/usb-ffs 0770 shell shell
+    mkdir /dev/usb-ffs/adb 0770 shell shell
+    mount functionfs adb /dev/usb-ffs/adb rmode=0770,fmode=0660,uid=2000,gid=2000
+    write /sys/class/android_usb/android0/f_ffs/aliases adb
+    # 3.10 f_fs has no aio support; make adbd use plain read()/write().
+    setprop sys.usb.ffs.aio_compat 1
+
 on post-fs-data
     chown system system /sys/class/android_usb/android0/f_mass_storage/lun/file
     chmod 0660 /sys/class/android_usb/android0/f_mass_storage/lun/file
