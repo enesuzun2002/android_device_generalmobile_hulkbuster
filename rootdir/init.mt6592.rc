@@ -7,10 +7,17 @@ import init.mt6592.usb.rc
 on charger
     mount ext4 /emmc@android /system ro wait
     start drvbd
-    start servicemanager
 
     # disable USB
     write /sys/devices/platform/mt_usb/cmode 0
+
+# Power-off charging UI. Pie's init.rc no longer defines it; the kernel adds
+# androidboot.mode=charger when LK boots in power-off charging mode, so init
+# runs the "charger" trigger above and class charger starts this. Runs as
+# root: /sbin/charger is 0750 root.
+service charger /charger
+    class charger
+    seclabel u:r:charger:s0
 
 on init
     # cpusets (kernel support since the cpuset backport). The camera provider
