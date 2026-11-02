@@ -65,7 +65,10 @@ BOARD_MKBOOTIMG_ARGS := --mtk 1 \
 TARGET_OTA_ASSERT_DEVICE := etab5,ETAB5,E-TAB5,E-Tab5,hulkbuster
 
 # Shims for the Lollipop-era MTK blobs (symbols that moved or were removed
-# from the platform libraries). Format: <blob path>|<shim lib>.
+# from the platform libraries). Format: <blob path>|<shim lib>. A blob may be
+# listed more than once. libmtk_atomic provides android_atomic_*, which Pie's
+# libcutils no longer exports; libmtk_xlog provides __xlog_buf_printf;
+# libmtk_gui the L-era libgui symbols used by libgui_ext.
 TARGET_LD_SHIM_LIBS := \
     /system/lib/libui_ext.so|libmtk_symbols.so \
     /system/lib/libgui_ext.so|libmtk_symbols.so \
@@ -75,7 +78,100 @@ TARGET_LD_SHIM_LIBS := \
     /system/lib/hw/gps.mt6592.so|libmtk_symbols.so \
     /system/lib/libmnl.so|libmtk_symbols.so \
     /system/lib/libaudioflinger.so|libmtk_symbols.so \
-    /system/lib/libaudio.primary.default.so|libmtk_symbols.so
+    /system/lib/libaudio.primary.default.so|libmtk_symbols.so \
+    /system/lib/hw/camera.default.so|libmtk_symbols.so \
+    /system/lib/egl/libGLES_android.so|libmtk_atomic.so \
+    /system/lib/hw/hwcomposer.mt6592.so|libmtk_atomic.so \
+    /system/lib/libClearMotionFW.so|libmtk_atomic.so \
+    /system/lib/libJpgDecPipe.so|libmtk_atomic.so \
+    /system/lib/libGdmaScalerPipe.so|libmtk_atomic.so \
+    /system/lib/libMali.so|libmtk_atomic.so \
+    /system/lib/libMtkOmxVdec.so|libmtk_atomic.so \
+    /system/lib/libMtkOmxVenc.so|libmtk_atomic.so \
+    /system/lib/liba3m.so|libmtk_atomic.so \
+    /system/lib/libSwJpgCodec.so|libmtk_atomic.so \
+    /system/lib/libcam.device1.so|libmtk_atomic.so \
+    /system/lib/libcam.camadapter.so|libmtk_atomic.so \
+    /system/lib/libcam.utils.sensorlistener.so|libmtk_atomic.so \
+    /system/lib/libcam.campipe.so|libmtk_atomic.so \
+    /system/lib/libcam.camshot.so|libmtk_atomic.so \
+    /system/lib/libcam.client.so|libmtk_atomic.so \
+    /system/lib/libcam_utils.so|libmtk_atomic.so \
+    /system/lib/libcamdrv.so|libmtk_atomic.so \
+    /system/lib/libcorkscrew.so|libmtk_atomic.so \
+    /system/lib/libfeatureio.so|libmtk_atomic.so \
+    /system/lib/libgpu_aux.so|libmtk_atomic.so \
+    /system/lib/libgui_ext.so|libmtk_atomic.so \
+    /system/lib/libimageio.so|libmtk_atomic.so \
+    /system/lib/libja3m.so|libmtk_atomic.so \
+    /system/lib/libimageio_plat_drv.so|libmtk_atomic.so \
+    /system/lib/libmtk_mmutils.so|libmtk_atomic.so \
+    /system/lib/libvcodecdrv.so|libmtk_atomic.so \
+    /system/lib/libMali.so|libutilscallstack.so \
+    /system/lib/libgui_ext.so|libmtk_gui.so \
+    /system/bin/dualmdlogger|libmtk_xlog.so \
+    /system/bin/emcsmdlogger|libmtk_xlog.so \
+    /system/bin/factory|libmtk_xlog.so \
+    /system/bin/ipod|libmtk_xlog.so \
+    /system/bin/mdlogger|libmtk_xlog.so \
+    /system/bin/thermal|libmtk_xlog.so \
+    /system/bin/thermald|libmtk_xlog.so \
+    /system/lib/lib3a.so|libmtk_xlog.so \
+    /system/lib/libAGifEncoder.so|libmtk_xlog.so \
+    /system/lib/libBnMtkCodec.so|libmtk_xlog.so \
+    /system/lib/libClearMotionFW.so|libmtk_xlog.so \
+    /system/lib/libGdmaScalerPipe.so|libmtk_xlog.so \
+    /system/lib/libJpgDecPipe.so|libmtk_xlog.so \
+    /system/lib/libJpgEncPipe.so|libmtk_xlog.so \
+    /system/lib/libMJCjni.so|libmtk_xlog.so \
+    /system/lib/libMtkOmxAMRNBDec.so|libmtk_xlog.so \
+    /system/lib/libMtkOmxAMRWBDec.so|libmtk_xlog.so \
+    /system/lib/libMtkOmxAacDec.so|libmtk_xlog.so \
+    /system/lib/libMtkOmxAacEnc.so|libmtk_xlog.so \
+    /system/lib/libMtkOmxAdpcmDec.so|libmtk_xlog.so \
+    /system/lib/libMtkOmxAdpcmEnc.so|libmtk_xlog.so \
+    /system/lib/libMtkOmxAmrEnc.so|libmtk_xlog.so \
+    /system/lib/libMtkOmxApeDec.so|libmtk_xlog.so \
+    /system/lib/libMtkOmxAwbEnc.so|libmtk_xlog.so \
+    /system/lib/libMtkOmxFlacDec.so|libmtk_xlog.so \
+    /system/lib/libMtkOmxG711Dec.so|libmtk_xlog.so \
+    /system/lib/libMtkOmxGsmDec.so|libmtk_xlog.so \
+    /system/lib/libMtkOmxMp3Dec.so|libmtk_xlog.so \
+    /system/lib/libMtkOmxRawDec.so|libmtk_xlog.so \
+    /system/lib/libMtkOmxVorbisDec.so|libmtk_xlog.so \
+    /system/lib/libMtkOmxVorbisEnc.so|libmtk_xlog.so \
+    /system/lib/libSwJpgCodec.so|libmtk_xlog.so \
+    /system/lib/libcam.camadapter.so|libmtk_xlog.so \
+    /system/lib/libcam.campipe.so|libmtk_xlog.so \
+    /system/lib/libcam.client.so|libmtk_xlog.so \
+    /system/lib/libcam.device1.so|libmtk_xlog.so \
+    /system/lib/libcam.paramsmgr.so|libmtk_xlog.so \
+    /system/lib/libcam.utils.sensorlistener.so|libmtk_xlog.so \
+    /system/lib/libcam.utils.so|libmtk_xlog.so \
+    /system/lib/libcam_platform.so|libmtk_xlog.so \
+    /system/lib/libcamalgo.so|libmtk_xlog.so \
+    /system/lib/libcamdrv.so|libmtk_xlog.so \
+    /system/lib/libcameracustom.so|libmtk_xlog.so \
+    /system/lib/libdpframework.so|libmtk_xlog.so \
+    /system/lib/libdrmmtkutil.so|libmtk_xlog.so \
+    /system/lib/libfeatureio.so|libmtk_xlog.so \
+    /system/lib/libgifEncoder_jni.so|libmtk_xlog.so \
+    /system/lib/libimageio.so|libmtk_xlog.so \
+    /system/lib/libimageio_plat_drv.so|libmtk_xlog.so \
+    /system/lib/libmdloggerrecycle.so|libmtk_xlog.so \
+    /system/lib/libmjc.so|libmtk_xlog.so \
+    /system/lib/libmp4enc_sa.ca7.so|libmtk_xlog.so \
+    /system/lib/libmpo.so|libmtk_xlog.so \
+    /system/lib/libmpodecoder.so|libmtk_xlog.so \
+    /system/lib/libmpoencoder.so|libmtk_xlog.so \
+    /system/lib/libmpojni.so|libmtk_xlog.so \
+    /system/lib/libshowlogo.so|libmtk_xlog.so \
+    /system/lib/libvc1dec_sa.ca7.so|libmtk_xlog.so \
+    /system/lib/libvcodec_utility.so|libmtk_xlog.so \
+    /system/lib/libvcodecdrv.so|libmtk_xlog.so \
+    /system/lib/libvp8dec_sa.ca7.so|libmtk_xlog.so \
+    /system/xbin/BGW|libmtk_xlog.so \
+    /system/xbin/mnld|libmtk_xlog.so
 
 # MTK hardware
 BOARD_HAS_MTK_HARDWARE := true
@@ -146,3 +242,4 @@ TARGET_USE_CUSTOM_LUN_FILE_PATH := "/sys/devices/virtual/android_usb/android0/f_
 
 # SELinux
 BOARD_SEPOLICY_DIRS += $(DEVICE_PATH)/sepolicy
+

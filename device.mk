@@ -23,7 +23,7 @@ DEVICE_PACKAGE_OVERLAYS += $(DEVICE_PATH)/overlay
 # not be copied to $(PRODUCT_OUT)/kernel, where the kernel build installs it.
 
 # Symbols
-PRODUCT_PACKAGES += libmtk_symbols
+PRODUCT_PACKAGES += libmtk_symbols libmtk_atomic libmtk_xlog libmtk_gui
 
 # Memtrack
 PRODUCT_PACKAGES += memtrack.mt6592
