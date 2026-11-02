@@ -253,3 +253,8 @@ PRODUCT_PACKAGES += \
 # Bluetooth: Pie's bluetooth@1.0 HAL needs a BD address up front; bt_addr.sh
 # writes the NVRAM one here at post-fs-data.
 PRODUCT_DEFAULT_PROPERTY_OVERRIDES += ro.bt.bdaddr_path=/data/misc/bluetooth/bdaddr
+
+# ART: no Baker read barriers on these 32-bit Cortex-A7s. The runtime then
+# uses the CMS collector instead of concurrent copying, which removes the
+# read-barrier overhead from every managed field load.
+PRODUCT_ART_USE_READ_BARRIER := false
