@@ -39,3 +39,6 @@ ro.hardware.sensors=hulkbuster
 # libMali crashes in system_server's screen-off ColorFade (eglMakeCurrent);
 # skip the animation (frameworks/base patch)
 ro.config.disable_color_fade=true
+
+# Triple-buffer app surfaces (Pie defaults to double buffering)
+ro.sf.disable_triple_buffer=0

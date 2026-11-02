@@ -182,7 +182,9 @@ BOARD_GLOBAL_CPPFLAGS += -DMTK_HARDWARE
 # Graphics: legacy gralloc0/HWC1 blobs behind the passthrough HIDL HALs.
 USE_OPENGL_RENDERER := true
 NUM_FRAMEBUFFER_SURFACE_BUFFERS := 3
-TARGET_RUNNING_WITHOUT_SYNC_FRAMEWORK := true
+# The kernel has the Android sync framework (CONFIG_SYNC, SW_SYNC) and the
+# HWC 1.3 blob returns retire fences, so SurfaceFlinger can use them.
+TARGET_RUNNING_WITHOUT_SYNC_FRAMEWORK := false
 TARGET_HAS_HH_VSYNC_ISSUE := true
 BOARD_EGL_CFG := $(DEVICE_PATH)/configs/egl.cfg
 
