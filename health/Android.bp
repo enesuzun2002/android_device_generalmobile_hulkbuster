@@ -1,0 +1,42 @@
+// Health HAL 2.0 service for the MT6592 hulkbuster (GM E-Tab5).
+//
+// The MTK battery driver (drivers/power/mediatek/battery_common.c) registers
+// the standard "battery", "ac", "usb" and "wireless" power_supply nodes, but
+// the battery node has no voltage_now/temp; it exports batt_vol (mV) and
+// batt_temp (tenths of a degree C) instead. The stock AOSP service would
+// report 0 V / 0.0 C. This is the same code as the AOSP default service plus
+// board hooks that map those two attributes.
+cc_binary {
+    name: "android.hardware.health@2.0-service.hulkbuster",
+    init_rc: ["android.hardware.health@2.0-service.hulkbuster.rc"],
+    vendor: true,
+    relative_install_path: "hw",
+    srcs: ["service.cpp"],
+
+    cflags: [
+        "-Wall",
+        "-Werror",
+    ],
+
+    static_libs: [
+        "android.hardware.health@2.0-impl",
+        "android.hardware.health@1.0-convert",
+        "libhealthservice",
+        "libhealthstoragedefault",
+        "libbatterymonitor",
+    ],
+
+    shared_libs: [
+        "libbase",
+        "libcutils",
+        "libhidlbase",
+        "libhidltransport",
+        "libhwbinder",
+        "liblog",
+        "libutils",
+        "android.hardware.health@2.0",
+    ],
+
+    // Same init service name as the AOSP default, so never install both.
+    overrides: ["android.hardware.health@2.0-service"],
+}

@@ -1,0 +1,2 @@
+# MTK battery driver: batt_vol/batt_temp live under the platform device
+genfscon sysfs /devices/platform/battery u:object_r:sysfs_batteryinfo:s0
