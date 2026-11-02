@@ -55,3 +55,33 @@ frameworks-base/0001-display-allow-disabling-the-screen-on-off-ColorFade.patch
     so every screen-off killed the framework and left the button lights on.
     With ro.config.disable_color_fade=true (system.prop) DisplayPowerController
     takes the low-RAM path and skips the animation.
+
+art/0001-image_space-skip-the-zygote-image-verify-without-a-s.patch
+    Without a boot image in /system, Pie verified the zygote image on every
+    boot and pruned the dalvik-cache, so each boot recompiled the boot
+    classpath (5-10 minute boots). Skip the verify in that case.
+
+build-make/0001-main-add-a-PRODUCT_PACKAGES_FILTER-hook-for-device-t.patch
+    Lets a device tree drop packages that inherited product makefiles add
+    (here TrebuchetQuickStep, replaced by plain Trebuchet).
+
+frameworks-av/0001-cameraservice-cache-hal1-legacy-parameters-at-startu.patch
+    Opens each HAL1 camera once at cameraserver start to cache its legacy
+    parameters, so the first app open does not race the shim's own open
+    and get evicted.
+
+hardware-interfaces/0001-camera-device-support-pre-O-HAL1-clients.patch
+    MediaTek's N-era HAL1 calls get_memory with a NULL cookie and takes
+    references on preview buffers as ANativeWindowBuffers; handle both.
+
+hardware-interfaces/0002-audio-allow-skipping-the-legacy-device-dump.patch
+    The MTK audio.primary blob crashes in its legacy dump(); skip it when
+    ro.audio.skip_legacy_dump=true (system.prop).
+
+hardware-interfaces/0003-camera-device-translate-mtk-hal1-shutter-and-jpeg-ca.patch
+    MTK delivers the shutter and the JPEG as private messages; map them to
+    CAMERA_MSG_SHUTTER and CAMERA_MSG_COMPRESSED_IMAGE so photos save.
+
+hardware-interfaces/0004-camera-device-cap-advertised-picture-sizes-per-camer.patch
+    Hides picture sizes above ro.vendor.camera<id>.max_picture_size (the
+    main camera's borrowed feature table lists upscaled sizes).
