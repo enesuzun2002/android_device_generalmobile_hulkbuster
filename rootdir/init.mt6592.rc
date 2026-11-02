@@ -24,6 +24,14 @@ on charger
     write /sys/devices/platform/mt_usb/cmode 0
 
 on init
+    # cpusets (kernel support since the cpuset backport). The camera provider
+    # writes itself into camera-daemon, which init.rc does not create.
+    mkdir /dev/cpuset/camera-daemon 0750 cameraserver cameraserver
+    write /dev/cpuset/camera-daemon/cpus 0-7
+    write /dev/cpuset/camera-daemon/mems 0
+    chown cameraserver cameraserver /dev/cpuset/camera-daemon/tasks
+    chmod 0660 /dev/cpuset/camera-daemon/tasks
+
    # See storage config details at http://source.android.com/tech/storage/
     mkdir /storage/sdcard 0555 root root
  
@@ -680,3 +688,14 @@ on property:sys.perf.profile=2
     write /sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq "1664000"
     write /sys/devices/system/cpu/cpu0/cpufreq/scaling_min_freq "598000"
     write /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor "performance"
+
+# cpuset partitioning for the 8x Cortex-A7 (SMP, MTK hotplug may take CPUs
+# offline; the kernel keeps the requested sets). Background work stays on a
+# couple of cores so the UI thread, RenderThread and SurfaceFlinger keep the
+# rest.
+on boot
+    write /dev/cpuset/top-app/cpus 0-7
+    write /dev/cpuset/foreground/cpus 0-7
+    write /dev/cpuset/system-background/cpus 0-3
+    write /dev/cpuset/background/cpus 0-1
+    write /dev/cpuset/restricted/cpus 0-3
