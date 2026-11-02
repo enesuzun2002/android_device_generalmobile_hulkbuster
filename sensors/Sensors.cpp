@@ -317,10 +317,18 @@ Return<Result> Sensors::flush(int32_t sensorHandle) {
 
 Return<void> Sensors::poll(int32_t maxCount, poll_cb _hidl_cb) {
     std::vector<Event> out;
+    // SensorDevice::connectHidlService() pokes the HAL with poll(0) right after
+    // connecting and expects an immediate return; blocking here would hang
+    // system_server (WindowManagerService waits for SensorService). Match the
+    // stock HAL: reject maxCount <= 0 without waiting.
+    if (maxCount <= 0) {
+        _hidl_cb(Result::BAD_VALUE, hidl_vec<Event>(), hidl_vec<SensorInfo>());
+        return Void();
+    }
     {
         std::unique_lock<std::mutex> lk(mLock);
         mCond.wait(lk, [this] { return !mQueue.empty(); });
-        int n = std::min<int>(maxCount > 0 ? maxCount : 1, (int)mQueue.size());
+        int n = std::min<int>(maxCount, (int)mQueue.size());
         out.reserve(n);
         for (int i = 0; i < n; i++) {
             Event ev = mQueue.front();
