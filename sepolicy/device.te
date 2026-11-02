@@ -1,2 +1,5 @@
 # Wifi/WMT control node (/dev/wmtWifi)
 type wmtWifi_device, dev_type;
+
+# MTK hwmsen sensor framework node (/dev/hwmsensor)
+type hwmsensor_device, dev_type;

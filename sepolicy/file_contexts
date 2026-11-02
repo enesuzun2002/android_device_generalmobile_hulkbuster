@@ -4,3 +4,7 @@
 
 # Wifi device
 /dev/wmtWifi      u:object_r:wmtWifi_device:s0
+
+# MTK hwmsen sensor framework (used by the native sensors HAL)
+/dev/hwmsensor    u:object_r:hwmsensor_device:s0
+/(vendor|system/vendor)/bin/hw/android\.hardware\.sensors@1\.0-service\.hulkbuster u:object_r:hal_sensors_default_exec:s0

@@ -28,9 +28,10 @@ PRODUCT_PACKAGES += libmtk_symbols libmtk_atomic libmtk_xlog libmtk_gui
 # Memtrack
 PRODUCT_PACKAGES += memtrack.mt6592
 
-# Sensors: wrapper around the MTK sensors.mt6592.so blob that adds the
-# BMG160 gyroscope the blob does not list (see sensors/sensors_wrapper.c).
-PRODUCT_PACKAGES += sensors.hulkbuster
+# Sensors: native ISensors@1.0 service (sensors/) talking to the kernel hwmsen
+# framework directly; replaces the closed sensors.mt6592.so blob (HAL 1.1),
+# which Pie's sensors passthrough rejects (needs >= 1.3).
+PRODUCT_PACKAGES += android.hardware.sensors@1.0-service.hulkbuster
 
 # WebView: Pie's core_minimal.mk pulls in webview (external/chromium-webview)
 # and its loader/plat_support libraries; nothing to add here.
@@ -58,8 +59,6 @@ PRODUCT_PACKAGES += \
     android.hardware.light@2.0-service \
     android.hardware.power@1.0-impl \
     android.hardware.power@1.0-service \
-    android.hardware.sensors@1.0-impl \
-    android.hardware.sensors@1.0-service \
     android.hardware.usb@1.0-service \
     android.hardware.health@2.0-service \
     android.hardware.keymaster@4.0-service \

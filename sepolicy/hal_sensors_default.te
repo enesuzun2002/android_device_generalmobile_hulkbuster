@@ -1,0 +1,7 @@
+# Native sensors HAL for the MT6592 hwmsen kernel framework.
+allow hal_sensors_default hwmsensor_device:chr_file rw_file_perms;
+# "hwmdata" input node: data-ready events from hwmsen
+allow hal_sensors_default input_device:dir r_dir_perms;
+allow hal_sensors_default input_device:chr_file r_file_perms;
+# raw BMM050 magnetometer value from /sys/devices/platform/msensor/driver/sensordata
+r_dir_file(hal_sensors_default, sysfs)
