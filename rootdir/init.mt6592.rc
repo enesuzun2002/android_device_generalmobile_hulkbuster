@@ -1,23 +1,12 @@
 # platform specific configuration items
-# init.modem.rc (13 modem services: gsm0710muxd/rild/ccci_*/pppd_gprs) is
-# imported again: removing it was part of a de-phone trim that has been
-# reverted.
+# This tablet has no modem: init.modem.rc and the telephony daemons (ccci_*,
+# gsm0710muxd, muxreport, rild, terservice, ...) are gone along with their
+# blobs.
 import init.mt6592.usb.rc
-import init.modem.rc
-
-# This tablet has no modem. The RIL daemons are declared by init.modem.rc but
-# their binaries (/system/bin/rild, /system/bin/rildmd2) are not part of the
-# shipped blob set, and init restarts a failing service forever - disable them
-# explicitly instead. The remaining modem daemons (gsm0710muxd, muxreport,
-# ccci_*, pppd_gprs, terservice, permission_check) do have their binaries and
-# start and idle as they do on the stock ROM.
-service ril-daemon disabled
-service ril-daemon-md2 disabled
 
 on charger
     mount ext4 /emmc@android /system ro wait
     start drvbd
-    start ipod
     start servicemanager
 
     # disable USB
@@ -325,32 +314,24 @@ on post-fs-data
     mkdir /data/misc/gps 0770 gps gps
 
 on post-fs
-    exec /system/xbin/mknod /dev/wmtWifi c 153 0
     chmod 0660 /dev/wmtWifi
     # Pie's wifi HAL runs as wifi and writes WIFI_DRIVER_STATE_CTRL_PARAM here
     chown system wifi /dev/wmtWifi
 
     # VideoCodec
-    exec /system/xbin/mknod /dev/Vcodec c 160 0
     chmod 0666 /dev/Vcodec
     chown system media /dev/Vcodec
 
     # devmap
-    exec /system/xbin/mknod /dev/devmap c 196 0
     chmod 0444 /dev/devmap
     chown root system /dev/devmap
 
     # FM Radio device node
-    exec /system/xbin/mknod /dev/fm c 193 0
     chmod 0777 /dev/fm
     chown system media /dev/fm
 
     # for ppp options file
     mkdir /data/misc/ppp 0770 bluetooth net_bt
-
-    exec /system/xbin/mknod /dev/stpwmt c 190 0
-    exec /system/xbin/mknod /dev/stpgps c 191 0
-    exec /system/xbin/mknod /dev/stpbt  c 192 0
 
     # GPS
     chmod 0666 /dev/gps
@@ -374,12 +355,6 @@ on post-fs
     mkdir /data/nvram/APCFG/APRDEB 0770 media system
     chmod 0770 /dev/nvram
 
-    chown radio radio /sys/kernel/ccci/boot
-
-    chown radio system /system/etc/ril
-    chmod 0770 /system/etc/ril
-    chmod 0444 /system/etc/ril/oper.lis
-    setprop rild.nw.operlist /system/etc/ril/oper.lis
 
 service wmtLoader /system/bin/wmt_loader
     user root
@@ -497,63 +472,10 @@ service thermald /system/bin/thermald
     user system
     group system
 
-service emcsmdlogger /system/bin/emcsmdlogger
-    class main
-    user shell
-    group system shell radio sdcard_rw inet sdcard_r media_rw ccci
-    disabled
-    oneshot
-
-#
-#sensor service (begin)
-# The closed msensord/akmd*/bmm050d/orientationd/geomagneticd daemons are no
-# longer shipped: sensors are served by android.hardware.sensors@1.0-service.hulkbuster
+# The closed MTK sensor daemons (msensord, akmd*, bmm050d, orientationd,
+# geomagneticd, s62xd, ami304d, memsicd*, mc6420d, qmc5983d) are no longer
+# shipped: sensors are served by android.hardware.sensors@1.0-service.hulkbuster
 # (reads /dev/hwmsensor and the bmm050 raw sysfs node directly).
-#
-
-service s62xd /system/bin/s62xd
-    disabled
-    user compass
-    group system
-    class main
-
-service ami304d /system/bin/ami304d
-    user system
-    group system
-    disabled
-    class main
-
-service memsicd /system/bin/memsicd
-    disabled
-    user system
-    group system
-    class main
-
-service memsicd3416x /system/bin/memsicd3416x
-     disabled
-    user system
-    group system
-    class main
-
-service mc6420d /system/bin/mc6420d
-    disabled
-    user system
-    group system
-    class main
-
-service qmc5983d /system/bin/qmc5983d
-     disabled
-	 user system
-    group system
-    class main
-
-
-#
-#sensor service (end)
-#
-#
-#
-#
 
 service agpsd /system/bin/mtk_agpsd
     class main
@@ -610,12 +532,6 @@ service wifi2agps /system/bin/wifi2agps
     group gps inet
     oneshot
 
-service BGW /system/xbin/BGW
-    user root
-    group gps system radio
-    class main
-    oneshot
-
 # Boot diagnostics: leave a record of the boot on persistent storage so a
 # failed boot can be inspected afterwards. Harmless if it never runs.
 service mtkdiag_snapshot /system/bin/sh /mtkdiag.sh snapshot
@@ -638,13 +554,6 @@ service mtkdiag_watch /system/bin/sh /mtkdiag.sh watch
     group root
     disabled
     oneshot
-
-# Offline charging
-service ipod /system/bin/ipod
-    user root
-    group root
-    class ipo
-    disabled
 
 # CM Performance Profiles
 

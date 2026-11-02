@@ -7,9 +7,6 @@ wifi.interface=wlan0
 wifi.tethering.interface=ap0
 wifi.direct.interface=p2p0
 
-# FM Radio
-fmradio.driver.enable=1
-
 # LCD density
 ro.sf.lcd_density=220
 # gralloc.mt6592 HW_FB handles cannot cross processes on Pie (see FramebufferSurface)

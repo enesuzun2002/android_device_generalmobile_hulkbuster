@@ -85,10 +85,6 @@ PRODUCT_PACKAGES += \
 PRODUCT_COPY_FILES += \
     $(DEVICE_PATH)/configs/audio_policy.conf:system/etc/audio_policy.conf
 
-# GSM
-PRODUCT_COPY_FILES += \
-     $(DEVICE_PATH)/configs/spn-conf.xml:system/etc/spn-conf.xml
-
 # Bluetooth
 PRODUCT_PACKAGES += libbt-vendor
 
@@ -117,7 +113,6 @@ PRODUCT_COPY_FILES += \
 PRODUCT_COPY_FILES += \
     $(DEVICE_PATH)/rootdir/enableswap.sh:root/enableswap.sh \
     $(DEVICE_PATH)/rootdir/fstab.mt6592:root/fstab.mt6592 \
-    $(DEVICE_PATH)/rootdir/init.modem.rc:root/init.modem.rc \
     $(DEVICE_PATH)/rootdir/init.mt6592.rc:root/init.mt6592.rc \
     $(DEVICE_PATH)/rootdir/init.mt6592.usb.rc:root/init.mt6592.usb.rc \
     $(DEVICE_PATH)/rootdir/ueventd.mt6592.rc:root/ueventd.mt6592.rc \
