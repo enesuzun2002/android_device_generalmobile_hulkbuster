@@ -1,0 +1,23 @@
+// Native android.hardware.light@2.0 HIDL service for the MT6592 hulkbuster
+// (GM E-Tab5). Writes /sys/class/leds/{lcd,button}-backlight directly instead
+// of going through the closed lights.mt6592.so blob and the legacy
+// lights HAL passthrough. The panel has no RGB notification LED.
+cc_binary {
+    name: "android.hardware.light@2.0-service.hulkbuster",
+    defaults: ["hidl_defaults"],
+    relative_install_path: "hw",
+    vendor: true,
+    init_rc: ["android.hardware.light@2.0-service.hulkbuster.rc"],
+    srcs: [
+        "Light.cpp",
+        "service.cpp",
+    ],
+    shared_libs: [
+        "android.hardware.light@2.0",
+        "libbase",
+        "libhidlbase",
+        "libhidltransport",
+        "liblog",
+        "libutils",
+    ],
+}

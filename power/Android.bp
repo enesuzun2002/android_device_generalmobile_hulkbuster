@@ -1,0 +1,23 @@
+// Native android.hardware.power@1.0 HIDL service for the MT6592 hulkbuster
+// (GM E-Tab5). Replaces the passthrough to the vendor power.default.so blob,
+// which is the stock AOSP "Default Power HAL" stub (every call a no-op).
+// The MTK "hotplug" cpufreq governor does its own load/hotplug management,
+// so this service deliberately does not touch any CPU knobs.
+cc_binary {
+    name: "android.hardware.power@1.0-service.hulkbuster",
+    defaults: ["hidl_defaults"],
+    relative_install_path: "hw",
+    vendor: true,
+    init_rc: ["android.hardware.power@1.0-service.hulkbuster.rc"],
+    srcs: [
+        "Power.cpp",
+        "service.cpp",
+    ],
+    shared_libs: [
+        "android.hardware.power@1.0",
+        "libhidlbase",
+        "libhidltransport",
+        "liblog",
+        "libutils",
+    ],
+}
