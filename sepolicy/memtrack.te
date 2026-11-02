@@ -1,0 +1,6 @@
+# Per-process ion and Mali usage exported by the kernel for the memtrack HAL
+# (/proc/ion_pids, /proc/mali/pid_memory; see genfs_contexts).
+type proc_memtrack, fs_type, proc_type;
+
+allow hal_memtrack_default proc:dir search;
+allow hal_memtrack_default proc_memtrack:file r_file_perms;

@@ -48,15 +48,18 @@ PRODUCT_PACKAGES += \
     libhwc2on1adapter \
     libhwc2onfbadapter
 
-# Lights, power, health, thermal: native services (lights/, power/, health/,
-# thermal/). No memtrack (needs debugfs ion stats Pie does not mount) and no
-# USB HAL (no dual_role_usb in this kernel; init drives android_usb).
+# Lights, power, health, thermal, memtrack: native services (lights/, power/,
+# health/, thermal/, memtrack/). memtrack reads the kernel's /proc/ion_pids and
+# /proc/mali/pid_memory; the USB HAL uses the backported dual_role_usb class.
 PRODUCT_PACKAGES += \
     android.hardware.light@2.0-service.hulkbuster \
     android.hardware.power@1.0-service.hulkbuster \
+    android.hardware.health@2.0-service.hulkbuster \
     android.hardware.thermal@1.0-service.hulkbuster \
     android.hardware.usb@1.0-service \
-    android.hardware.health@2.0-service.hulkbuster \
+    android.hardware.memtrack@1.0-impl \
+    android.hardware.memtrack@1.0-service \
+    memtrack.mt6592 \
     android.hardware.keymaster@4.0-service \
     android.hardware.gnss@1.0-impl \
     android.hardware.gnss@1.0-service \

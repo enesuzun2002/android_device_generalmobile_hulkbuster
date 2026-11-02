@@ -1,2 +1,6 @@
 # MTK battery driver: batt_vol/batt_temp live under the platform device
 genfscon sysfs /devices/platform/battery u:object_r:sysfs_batteryinfo:s0
+
+# memtrack HAL: per-process ion / Mali usage (root:system 0440 procfs nodes)
+genfscon proc /ion_pids u:object_r:proc_memtrack:s0
+genfscon proc /mali/pid_memory u:object_r:proc_memtrack:s0
