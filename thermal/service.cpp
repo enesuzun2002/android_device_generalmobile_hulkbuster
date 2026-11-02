@@ -10,8 +10,11 @@ using android::hardware::configureRpcThreadpool;
 using android::hardware::joinRpcThreadpool;
 using android::hardware::thermal::V1_0::IThermal;
 
+void startThermalGovernor();  // ThermalGovernor.cpp
+
 int main() {
     configureRpcThreadpool(1, true /* callerWillJoin */);
+    startThermalGovernor();
 
     android::sp<IThermal> thermal = new android::hardware::thermal::V1_0::hulkbuster::Thermal();
     if (thermal->registerAsService() != android::OK) {

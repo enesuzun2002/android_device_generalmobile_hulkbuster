@@ -10,6 +10,7 @@ cc_binary {
     init_rc: ["android.hardware.thermal@1.0-service.hulkbuster.rc"],
     srcs: [
         "Thermal.cpp",
+        "ThermalGovernor.cpp",
         "service.cpp",
     ],
     shared_libs: [
