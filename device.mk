@@ -55,6 +55,7 @@ PRODUCT_PACKAGES += \
     android.hardware.light@2.0-service.hulkbuster \
     android.hardware.power@1.0-service.hulkbuster \
     android.hardware.thermal@1.0-service.hulkbuster \
+    android.hardware.usb@1.0-service \
     android.hardware.health@2.0-service.hulkbuster \
     android.hardware.keymaster@4.0-service \
     android.hardware.gnss@1.0-impl \
