@@ -10,6 +10,7 @@ namespace V1_0 {
 namespace hulkbuster {
 
 struct Power : public IPower {
+    Power();
     Return<void> setInteractive(bool interactive) override;
     Return<void> powerHint(PowerHint hint, int32_t data) override;
     Return<void> setFeature(Feature feature, bool activate) override;

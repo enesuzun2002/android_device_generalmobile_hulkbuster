@@ -8,6 +8,7 @@
 #include <condition_variable>
 #include <fstream>
 #include <mutex>
+#include <string>
 #include <thread>
 
 namespace android {
@@ -18,13 +19,13 @@ namespace hulkbuster {
 
 namespace {
 
-// MTK hotplug governor: minimum number of online cores. The governor adds
-// cores on load and input by itself, but it reacts in 150-300 ms, which is
-// most of a cold app start or a fling on these Cortex-A7 cores. While the
-// screen is on all eight cores stay online (cpufreq still scales their clock
-// and the MTK thermal policy can still cap cores if the die heats up); with
-// the screen off the governor is free to take them down to one. The boosts
-// only matter if the screen-on floor is ever lowered again.
+// Core and boost policy. With the interactive governor (default kernel
+// governor now) the HAL owns hotplug: all eight Cortex-A7 cores online while
+// the screen is on, only cpu0 with it off; touches pulse the governor boost
+// and launches hold it. The kernel's MTK thermal/low-battery limiter can still
+// take cores offline (onlining then fails with EPERM, which is fine). With
+// the old MTK "hotplug" governor the same policy is expressed through its
+// cpu_num_base floor instead.
 constexpr const char* kCpuNumBase = "/sys/devices/system/cpu/cpufreq/hotplug/cpu_num_base";
 constexpr int kScreenOffCores = 1;
 constexpr int kScreenOnCores = 8;
@@ -32,21 +33,69 @@ constexpr int kBoostCores = 8;
 constexpr auto kLaunchMaxBoost = std::chrono::seconds(3);       // LAUNCH(0) normally ends it
 constexpr auto kInteractionBoost = std::chrono::milliseconds(1000);
 
+// CPU undervolt on top of MTK PTP (per-chip closed-loop voltage). PTP adds
+// mt_ptp_offset (units of 6.25 mV PMIC codes, clamped by the kernel to
+// 0.90..1.225 V) to every OPP. Validated on this tablet with an 8-worker
+// checksum stress at 1.664 GHz down to -20 (top OPP 930 mV), but -17 still
+// oopsed after ~48 min of normal use: the offset also pushes the middle OPPs
+// (1.365/1.248/1.144 GHz) onto the 0.90 V floor, which the top-OPP stress
+// never exercised. Disabled (offset 0) until every OPP is validated.
+constexpr const char* kPtpOffset = "/proc/ptp/ptp_offset";
+constexpr int kPtpValidatedOffset = -3;  // -> offset 0
+constexpr int kPtpGuard = 3;
+constexpr int kPtpOffset_ = kPtpValidatedOffset + kPtpGuard;
+
+void applyUndervolt() {
+    std::ofstream f(kPtpOffset);
+    f << kPtpOffset_;
+    if (!f) ALOGW("cannot write %s", kPtpOffset);
+}
+
 std::mutex gLock;
 std::condition_variable gCond;
 int gFloor = kScreenOnCores;
 bool gBoosted = false;
 uint64_t gGeneration = 0;
 
-void writeCores(int cores) {
-    std::ofstream f(kCpuNumBase);
-    f << cores;
-    if (!f) ALOGW("cannot write %s", kCpuNumBase);
+bool writeFile(const char* path, const char* value) {
+    std::ofstream f(path);
+    f << value;
+    return static_cast<bool>(f);
 }
+
+bool interactiveGovernor() {
+    std::ifstream f("/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor");
+    std::string gov;
+    f >> gov;
+    return gov == "interactive";
+}
+
+void setOnlineCores(int cores) {
+    for (int cpu = 1; cpu < kBoostCores; cpu++) {
+        std::string path = "/sys/devices/system/cpu/cpu" + std::to_string(cpu) + "/online";
+        // EPERM while the MTK thermal/battery limiter caps the core count.
+        writeFile(path.c_str(), cpu < cores ? "1" : "0");
+    }
+}
+
+void writeCores(int cores) {
+    if (interactiveGovernor()) {
+        setOnlineCores(cores);
+    } else if (!writeFile(kCpuNumBase, std::to_string(cores).c_str())) {
+        ALOGW("cannot write %s", kCpuNumBase);
+    }
+}
+
+constexpr const char* kInteractiveBoost = "/sys/devices/system/cpu/cpufreq/interactive/boost";
 
 // Must hold gLock.
 void applyLocked() {
-    writeCores(gBoosted ? kBoostCores : gFloor);
+    if (interactiveGovernor()) {
+        setOnlineCores(gFloor);
+        writeFile(kInteractiveBoost, gBoosted ? "1" : "0");
+    } else {
+        writeCores(gBoosted ? kBoostCores : gFloor);
+    }
 }
 
 // Start (or extend) a boost that ends after `duration` unless renewed.
@@ -92,8 +141,13 @@ void setFloor(int cores) {
 
 }  // namespace
 
+Power::Power() {
+    applyUndervolt();
+}
+
 Return<void> Power::setInteractive(bool interactive) {
     ALOGV("setInteractive(%d)", interactive);
+    if (interactive) applyUndervolt();
     setFloor(interactive ? kScreenOnCores : kScreenOffCores);
     return Void();
 }
