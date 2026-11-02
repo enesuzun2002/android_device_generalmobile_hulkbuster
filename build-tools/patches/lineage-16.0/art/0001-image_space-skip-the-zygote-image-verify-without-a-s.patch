@@ -1,0 +1,38 @@
+From 4687d54852eb73598c32345a4dcfbdb10449efef Mon Sep 17 00:00:00 2001
+From: enesuzun2002 <emurat.uzun@gmail.com>
+Date: Mon, 2 Nov 2026 16:21:23 +0300
+Subject: [PATCH] image_space: skip the zygote image verify without a system
+ image
+
+patchoat --verify compares the dalvik-cache boot image against the one
+in /system. A build without dexpreopt has no system image, so the check
+always fails and the zygote prunes the cache, recompiling the boot
+image, system_server and every app on each boot. Only verify when a
+system image exists.
+
+Change-Id: Ia2af5b15d88ae37515792fe4bec64e8ed44dc0ee
+---
+ runtime/gc/space/image_space.cc | 7 ++++++-
+ 1 file changed, 6 insertions(+), 1 deletion(-)
+
+diff --git a/runtime/gc/space/image_space.cc b/runtime/gc/space/image_space.cc
+index fa68481..50f66c4 100644
+--- a/runtime/gc/space/image_space.cc
++++ b/runtime/gc/space/image_space.cc
+@@ -1539,7 +1539,12 @@ std::unique_ptr<ImageSpace> ImageSpace::CreateBootImage(const char* image_locati
+     DCHECK(!dalvik_cache.empty());
+     std::string local_error_msg;
+     // All secondary images are verified when the primary image is verified.
+-    bool verified = VerifyImage(image_location, dalvik_cache.c_str(), image_isa, &local_error_msg);
++    // patchoat --verify compares the cache against the image in /system. When
++    // there is no system image (no dexpreopt) the check can only fail, which
++    // would prune the cache and recompile the boot image and every app on
++    // each boot, so only verify when there is something to compare against.
++    bool verified = !has_system ||
++        VerifyImage(image_location, dalvik_cache.c_str(), image_isa, &local_error_msg);
+     // If we prune for space at a secondary image, we may end up in a crash loop with the _exit
+     // path.
+     bool check_space = CheckSpace(dalvik_cache, &local_error_msg);
+-- 
+2.56.0
+
