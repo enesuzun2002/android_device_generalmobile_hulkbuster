@@ -278,6 +278,11 @@ on init
     chown system camera /dev/mtk_jpeg
 
 on post-fs-data
+    # wpa_supplicant (Pie layout)
+    mkdir /data/vendor/wifi 0771 wifi wifi
+    mkdir /data/vendor/wifi/wpa 0770 wifi wifi
+    mkdir /data/vendor/wifi/wpa/sockets 0770 wifi wifi
+
     # BD address for the bluetooth HAL (ro.bt.bdaddr_path), see bt_addr.sh
     exec - root root -- /system/bin/sh /bt_addr.sh
 
@@ -322,7 +327,8 @@ on post-fs-data
 on post-fs
     exec /system/xbin/mknod /dev/wmtWifi c 153 0
     chmod 0660 /dev/wmtWifi
-    chown system system /dev/wmtWifi
+    # Pie's wifi HAL runs as wifi and writes WIFI_DRIVER_STATE_CTRL_PARAM here
+    chown system wifi /dev/wmtWifi
 
     # VideoCodec
     exec /system/xbin/mknod /dev/Vcodec c 160 0
@@ -424,34 +430,16 @@ on property:sys.boot_completed=1
     write /sys/block/mmcblk0/queue/scheduler deadline
     write /sys/block/mmcblk0/queue/read_ahead_kb 512
 
-service p2p_supplicant /system/bin/wpa_supplicant -dd \
-    -iwlan0 -Dnl80211 -c/data/misc/wifi/wpa_supplicant.conf \
-    -I/system/etc/wifi/wpa_supplicant_overlay.conf \
-    -O/data/misc/wifi/sockets -N \
-    -ip2p0 -Dnl80211 -c/data/misc/wifi/p2p_supplicant.conf \
-    -I/system/etc/wifi/p2p_supplicant_overlay.conf \
-    -puse_p2p_group_interface=1 -e/data/misc/wifi/entropy.bin \
+# Pie: wpa_supplicant lives in /vendor/bin/hw and is controlled over HIDL
+# (ISupplicant); the framework adds wlan0/p2p0 itself. Configs are migrated
+# by the supplicant from /system/etc/wifi into /data/vendor/wifi/wpa.
+service wpa_supplicant /vendor/bin/hw/wpa_supplicant \
+    -O/data/vendor/wifi/wpa/sockets -puse_p2p_group_interface=1 \
     -g@android:wpa_wlan0
-    #   we will start as root and wpa_supplicant will switch to user wifi
-    #   after setting up the capabilities required for WEXT
-    #   user wifi
-    #   group wifi inet keystore
-    class main
+    interface android.hardware.wifi.supplicant@1.0::ISupplicant default
+    interface android.hardware.wifi.supplicant@1.1::ISupplicant default
     socket wpa_wlan0 dgram 660 wifi wifi
-    disabled
-    oneshot
-
-service wpa_supplicant /system/bin/wpa_supplicant -dd \
-    -iwlan0 -Dnl80211 -c/data/misc/wifi/wpa_supplicant.conf \
-    -I/system/etc/wifi/wpa_supplicant_overlay.conf \
-    -O/data/misc/wifi/sockets \
-    -e/data/misc/wifi/entropy.bin -g@android:wpa_wlan0
-    #   we will start as root and wpa_supplicant will switch to user wifi
-    #   after setting up the capabilities required for WEXT
-    #   user wifi
-    #   group wifi inet keystore
     class main
-    socket wpa_wlan0 dgram 660 wifi wifi
     disabled
     oneshot
 
