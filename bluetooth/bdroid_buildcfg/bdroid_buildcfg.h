@@ -17,7 +17,7 @@
 #ifndef _BDROID_BUILDCFG_H
 #define _BDROID_BUILDCFG_H
 
-#define BTM_DEF_LOCAL_NAME   "P55 Novo by Shivom Techdroid"
+#define BTM_DEF_LOCAL_NAME   "General Mobile E-Tab5"
 
 #define BTA_DISABLE_DELAY 1000 /* in milliseconds */
 
