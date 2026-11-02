@@ -1,0 +1,22 @@
+# Imported by TWRP's init.rc as /init.recovery.${ro.hardware}.rc
+# (ro.hardware comes from androidboot.hardware=mt6592).
+
+on init
+    # The 3.10 kernel's f_fs has no aio support: make adbd use read()/write().
+    setprop sys.usb.ffs.aio_compat 1
+
+on fs
+    # TWRP's init.rc already mounts functionfs on /dev/usb-ffs/adb and
+    # init.recovery.usb.rc writes f_ffs/aliases=adb (MTK android.c gadget).
+    # Re-assert gadget identity while the gadget is still disabled.
+    write /sys/class/android_usb/android0/enable 0
+    write /sys/class/android_usb/android0/idVendor 18D1
+    write /sys/class/android_usb/android0/idProduct D001
+    write /sys/class/android_usb/android0/f_ffs/aliases adb
+    write /sys/class/android_usb/android0/functions adb
+    write /sys/class/android_usb/android0/iManufacturer ${ro.product.manufacturer}
+    write /sys/class/android_usb/android0/iProduct ${ro.product.model}
+    write /sys/class/android_usb/android0/iSerial ${ro.serialno}
+
+on boot
+    write /sys/class/leds/lcd-backlight/brightness 160
