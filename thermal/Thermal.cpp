@@ -44,6 +44,9 @@ struct ZoneSpec {
 // falling back to the AP and ABB sensors if that zone is missing.
 const ZoneSpec kZones[] = {
     {TemperatureType::CPU, "cpu", "mtktscpu", 120.0f},        // MTKTSCPU_TEMP_CRIT
+    // The Mali-450 is on the same die and MTK throttles it from the same
+    // sensor (mtktscpu reads the die thermal controller), so report it as GPU.
+    {TemperatureType::GPU, "gpu", "mtktscpu", 120.0f},
     {TemperatureType::BATTERY, "battery", "mtktsbattery", NAN},
     {TemperatureType::SKIN, "skin", "mtktspmic", 150.0f},     // mtktspmic_TEMP_CRIT
     {TemperatureType::SKIN, "skin", "mtktsAP", NAN},
