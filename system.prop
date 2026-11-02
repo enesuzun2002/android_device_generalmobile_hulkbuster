@@ -42,3 +42,5 @@ ro.config.disable_color_fade=true
 
 # Triple-buffer app surfaces (Pie defaults to double buffering)
 ro.sf.disable_triple_buffer=0
+# The MTK audio.primary blob crashes in its legacy dump(); skip it on dumpsys
+ro.audio.skip_legacy_dump=true

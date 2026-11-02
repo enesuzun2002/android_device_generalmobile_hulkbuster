@@ -1,0 +1,46 @@
+From 4f6ad6b1530e8a669b5a42f594d1dfe554dcbe25 Mon Sep 17 00:00:00 2001
+From: enesuzun2002 <emurat.uzun@gmail.com>
+Date: Mon, 2 Nov 2026 18:17:31 +0300
+Subject: [PATCH 2/2] audio: allow skipping the legacy device dump
+
+Some pre-O audio.primary implementations crash in dump() on the fd
+from dumpsys/bugreport, taking audioserver down. Skip the legacy dump
+when ro.audio.skip_legacy_dump is true.
+
+Change-Id: Ie8ae0156df9f80a61767fbcb90072813eedebca2
+---
+ .../include/core/all-versions/default/Device.impl.h   | 11 ++++++++++-
+ 1 file changed, 10 insertions(+), 1 deletion(-)
+
+diff --git a/audio/core/all-versions/default/include/core/all-versions/default/Device.impl.h b/audio/core/all-versions/default/include/core/all-versions/default/Device.impl.h
+index 230b8de..be3ba8b 100644
+--- a/audio/core/all-versions/default/include/core/all-versions/default/Device.impl.h
++++ b/audio/core/all-versions/default/include/core/all-versions/default/Device.impl.h
+@@ -14,6 +14,7 @@
+  * limitations under the License.
+  */
+ 
++#include <cutils/properties.h>
+ #include <common/all-versions/IncludeGuard.h>
+ 
+ //#define LOG_NDEBUG 0
+@@ -308,7 +309,15 @@ Return<void> Device::debugDump(const hidl_handle& fd) {
+ 
+ Return<void> Device::debug(const hidl_handle& fd, const hidl_vec<hidl_string>& /* options */) {
+     if (fd.getNativeHandle() != nullptr && fd->numFds == 1) {
+-        analyzeStatus("dump", mDevice->dump(mDevice, fd->data[0]));
++        // Some legacy audio_hw_device dump() implementations (MediaTek's
++        // pre-O audio.primary) crash on the fd passed by dumpsys/bugreport,
++        // which takes audioserver down with them; such devices set
++        // ro.audio.skip_legacy_dump=true.
++        if (property_get_bool("ro.audio.skip_legacy_dump", false)) {
++            dprintf(fd->data[0], "legacy audio HAL dump skipped\n");
++        } else {
++            analyzeStatus("dump", mDevice->dump(mDevice, fd->data[0]));
++        }
+     }
+     return Void();
+ }
+-- 
+2.56.0
+
