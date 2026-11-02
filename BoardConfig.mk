@@ -236,6 +236,10 @@ WITH_DEXPREOPT := false
 
 # Recovery
 TARGET_RECOVERY_FSTAB := $(DEVICE_PATH)/rootdir/recovery.fstab
+
+# OTA: write boot.img with dd (releasetools.py); /dev/bootimg is a dumchar
+# character device that Pie's package_extract_file cannot write.
+TARGET_RELEASETOOLS_EXTENSIONS := $(DEVICE_PATH)
 BOARD_HAS_NO_SELECT_BUTTON := true
 TARGET_RECOVERY_PIXEL_FORMAT := "RGBA_8888"
 
