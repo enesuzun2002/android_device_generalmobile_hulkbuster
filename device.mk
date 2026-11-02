@@ -25,9 +25,6 @@ DEVICE_PACKAGE_OVERLAYS += $(DEVICE_PATH)/overlay
 # Symbols
 PRODUCT_PACKAGES += libmtk_symbols libmtk_atomic libmtk_xlog libmtk_gui
 
-# Memtrack
-PRODUCT_PACKAGES += memtrack.mt6592
-
 # Sensors: native ISensors@1.0 service (sensors/) talking to the kernel hwmsen
 # framework directly; replaces the closed sensors.mt6592.so blob (HAL 1.1),
 # which Pie's sensors passthrough rejects (needs >= 1.3).
@@ -51,14 +48,13 @@ PRODUCT_PACKAGES += \
     libhwc2on1adapter \
     libhwc2onfbadapter
 
-# Memtrack, lights, power, sensors, usb, health, thermal-less
+# Lights, power, health, thermal: native services (lights/, power/, health/,
+# thermal/). No memtrack (needs debugfs ion stats Pie does not mount) and no
+# USB HAL (no dual_role_usb in this kernel; init drives android_usb).
 PRODUCT_PACKAGES += \
-    android.hardware.memtrack@1.0-impl \
-    android.hardware.memtrack@1.0-service \
     android.hardware.light@2.0-service.hulkbuster \
     android.hardware.power@1.0-service.hulkbuster \
     android.hardware.thermal@1.0-service.hulkbuster \
-    android.hardware.usb@1.0-service \
     android.hardware.health@2.0-service.hulkbuster \
     android.hardware.keymaster@4.0-service \
     android.hardware.gnss@1.0-impl \
