@@ -29,6 +29,12 @@ system-bt/0001-controller-let-a-device-skip-the-LE-vendor-capabilities-query.pat
     HCI 0xFD53, so Bluetooth enable times out. Gated on
     BTM_BLE_SKIP_OFFLOAD_FEATURES_QUERY (bluetooth/bdroid_buildcfg).
 
+system-bt/0002-hci-stop-at-the-last-extended-features-page-the-controller-serves.patch
+    The MT6592 controller reports more classic feature pages than it
+    serves and rejects page 2 with status 0x30; Pie's parser CHECK()ed the
+    response and aborted the Bluetooth stack (old Bluedroid ignored it).
+    Stop at the last page the controller accepts.
+
 vendor-lineage/0001-kernel-only-match-CONFIG-m-lines-when-detecting-modules.patch
     The kernel build's module detection grepped for '=m' anywhere in the
     config and wrongly enabled the modules step for this all-built-in

@@ -1,0 +1,43 @@
+From 1047b3d3a65847a7e0a5636d0b9527f16c09d38d Mon Sep 17 00:00:00 2001
+From: enesuzun2002 <emurat.uzun@gmail.com>
+Date: Mon, 2 Nov 2026 14:39:17 +0300
+Subject: [PATCH] hci: stop at the last extended features page the controller
+ serves
+
+The MT6592 combo controller reports more classic feature pages than it
+serves and answers HCI Read Local Extended Features for the extra page
+with status 0x30 (parameter out of mandatory range). Pie's parser
+CHECK()s the response and aborts the stack; old Bluedroid ignored it.
+Treat the page before the rejected one as the last page instead.
+---
+ hci/src/hci_packet_parser.cc | 14 +++++++++++++-
+ 1 file changed, 13 insertions(+), 1 deletion(-)
+
+diff --git a/hci/src/hci_packet_parser.cc b/hci/src/hci_packet_parser.cc
+index 3f4e46c..a9337d2 100644
+--- a/hci/src/hci_packet_parser.cc
++++ b/hci/src/hci_packet_parser.cc
+@@ -128,7 +128,19 @@ static void parse_read_local_extended_features_response(
+   uint8_t* stream = read_command_complete_header(
+       response, HCI_READ_LOCAL_EXT_FEATURES,
+       2 + sizeof(bt_device_features_t) /* bytes after */);
+-  CHECK(stream != NULL);
++  if (stream == NULL) {
++    // Some controllers (e.g. the MT6592 combo) report more feature pages than
++    // they serve and reject the extra ones (status 0x30). Treat the page
++    // before the rejected one as the last page instead of aborting; the
++    // caller passes the requested page in *page_number_ptr.
++    LOG_WARN(LOG_TAG,
++             "%s: controller rejected extended features page %d, "
++             "stopping at the previous page",
++             __func__, *page_number_ptr);
++    if (*page_number_ptr > 0) *max_page_number_ptr = *page_number_ptr - 1;
++    buffer_allocator->free(response);
++    return;
++  }
+ 
+   STREAM_TO_UINT8(*page_number_ptr, stream);
+   STREAM_TO_UINT8(*max_page_number_ptr, stream);
+-- 
+2.56.0
+
