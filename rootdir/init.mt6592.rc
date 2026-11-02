@@ -558,6 +558,27 @@ service agpsd /system/bin/mtk_agpsd
     group gps ccci inet sdcard_r sdcard_rw misc
     oneshot
 
+# The legacy gps.mt6592.so HAL talks to mnld over /data/gps_mnl/hal2mnld
+# (root:inet 0660), chowns its own socket to inet and opens AF_INET sockets
+# (paranoid network): it needs the inet group. On 14.1 it ran inside
+# system_server, which has it; on Pie it runs in the gnss HIDL service. Without
+# it mtk_init() waits forever and the system_server watchdog kills the
+# framework (GnssGeofenceProvider blocks the main thread).
+service vendor.gnss_service /vendor/bin/hw/android.hardware.gnss@1.0-service
+    override
+    class hal
+    # TEST: root, to tell a privilege check from a path/group problem in the
+    # gps_state_thread bind() that still fails with EACCES as gps+inet.
+    user root
+    group system gps radio inet
+
+# gps.mt6592.so supports a single init() per process: when system_server dies
+# and comes back, its GnssLocationProvider.class_init_native() deadlocks on the
+# surviving HAL and the watchdog kills the framework again (restart loop).
+# Give every new system_server a fresh GNSS HAL.
+on property:init.svc.zygote=restarting
+    restart vendor.gnss_service
+
 service mnld /system/xbin/mnld
     class main
     user root
