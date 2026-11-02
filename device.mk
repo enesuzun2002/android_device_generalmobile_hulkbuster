@@ -140,6 +140,10 @@ PRODUCT_COPY_FILES += \
     $(DEVICE_PATH)/rootdir/mtkdiag.sh:root/mtkdiag.sh
 endif
 
+# Bluetooth address helper (see rootdir/bt_addr.sh)
+PRODUCT_COPY_FILES += \
+    $(DEVICE_PATH)/rootdir/bt_addr.sh:root/bt_addr.sh
+
 # Permissions
 PRODUCT_COPY_FILES += \
     frameworks/native/data/etc/android.hardware.bluetooth_le.xml:system/etc/permissions/android.hardware.bluetooth_le.xml \
@@ -252,3 +256,7 @@ $(call inherit-product, frameworks/native/build/tablet-10in-xhdpi-2048-dalvik-he
 PRODUCT_PACKAGES += \
     CarrierConfig \
     CellBroadcastReceiver
+
+# Bluetooth: Pie's bluetooth@1.0 HAL needs a BD address up front; bt_addr.sh
+# writes the NVRAM one here at post-fs-data.
+PRODUCT_DEFAULT_PROPERTY_OVERRIDES += ro.bt.bdaddr_path=/data/misc/bluetooth/bdaddr

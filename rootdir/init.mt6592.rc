@@ -270,6 +270,9 @@ on init
     chown system camera /dev/mtk_jpeg
 
 on post-fs-data
+    # BD address for the bluetooth HAL (ro.bt.bdaddr_path), see bt_addr.sh
+    exec - root root -- /system/bin/sh /bt_addr.sh
+
     # Keep a copy of the kernel ring buffer on disk for as long as init
     # survives. This is the only diagnostic we have without UART or adb.
     start mtkdiag_pump
@@ -578,6 +581,18 @@ service vendor.gnss_service /vendor/bin/hw/android.hardware.gnss@1.0-service
 # Give every new system_server a fresh GNSS HAL.
 on property:init.svc.zygote=restarting
     restart vendor.gnss_service
+
+# The MTK libbluetoothdrv blob opens /dev/stpbt from inside the Pie bluetooth
+# HAL, which runs as "bluetooth" with no supplementary groups, while init
+# leaves the node root:radio. Add radio. (net_bt_stack no longer exists on Pie;
+# capabilities only take effect once the kernel has ambient capability support.)
+service vendor.bluetooth-1-0 /vendor/bin/hw/android.hardware.bluetooth@1.0-service
+    override
+    class hal
+    capabilities BLOCK_SUSPEND NET_ADMIN SYS_NICE
+    user bluetooth
+    group bluetooth radio
+    writepid /dev/stune/foreground/tasks
 
 service mnld /system/xbin/mnld
     class main
