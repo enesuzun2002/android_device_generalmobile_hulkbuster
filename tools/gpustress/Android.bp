@@ -1,0 +1,15 @@
+// GPU stress/validation tool for DVFS work (not installed by default).
+cc_binary {
+    name: "gpustress",
+    srcs: ["gpustress.cpp"],
+    shared_libs: ["libEGL", "libGLESv2", "liblog"],
+    cflags: ["-Wall", "-Werror"],
+}
+
+// Memory/swap validation: fills memory with verifiable patterns from several
+// threads to push pages through zram, then checks every page.
+cc_binary {
+    name: "memstress",
+    srcs: ["memstress.cpp"],
+    cflags: ["-Wall", "-Werror"],
+}
