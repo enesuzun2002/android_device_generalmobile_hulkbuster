@@ -1,0 +1,65 @@
+From 384130f6f1e31ca4bc7d9affeaa475b50de77a86 Mon Sep 17 00:00:00 2001
+From: enesuzun2002 <emurat.uzun@gmail.com>
+Date: Tue, 3 Nov 2026 21:25:36 +0300
+Subject: [PATCH] graphics: composer: hwc2on1adapter: own the client target
+ acquire fence
+
+MediaTek's HWC1 (hwcomposer.mt6592) never closes the FRAMEBUFFER_TARGET
+acquire fence, leaking one sync_fence fd per GPU-composited frame. After
+~30k frames the composer ran out of fds, gralloc could not dlopen itself
+in unregisterBuffer and dereferenced NULL, and SurfaceFlinger aborted on
+the dead composer (UI restart). Wait for the client target in the adapter
+and give HWC1 no fence. Verified: composer fd count stays ~40 instead of
+growing ~10/s while drawing.
+
+Change-Id: If22c2d811d0df36f1ed7080cf35764e5323d142b
+---
+ .../composer/2.1/utils/hwc2on1adapter/Android.bp     |  1 +
+ .../2.1/utils/hwc2on1adapter/HWC2On1Adapter.cpp      | 12 ++++++++++++
+ 2 files changed, 13 insertions(+)
+
+diff --git a/graphics/composer/2.1/utils/hwc2on1adapter/Android.bp b/graphics/composer/2.1/utils/hwc2on1adapter/Android.bp
+index 420a1f6..0f1d7d6 100644
+--- a/graphics/composer/2.1/utils/hwc2on1adapter/Android.bp
++++ b/graphics/composer/2.1/utils/hwc2on1adapter/Android.bp
+@@ -68,6 +68,7 @@ cc_library_shared {
+         "libcutils",
+         "liblog",
+         "libhardware",
++        "libsync",
+     ],
+ 
+     export_include_dirs: ["include"],
+diff --git a/graphics/composer/2.1/utils/hwc2on1adapter/HWC2On1Adapter.cpp b/graphics/composer/2.1/utils/hwc2on1adapter/HWC2On1Adapter.cpp
+index 6551a99..b968a5f 100644
+--- a/graphics/composer/2.1/utils/hwc2on1adapter/HWC2On1Adapter.cpp
++++ b/graphics/composer/2.1/utils/hwc2on1adapter/HWC2On1Adapter.cpp
+@@ -24,6 +24,7 @@
+ 
+ 
+ #include <inttypes.h>
++#include <sync/sync.h>
+ 
+ #include <chrono>
+ #include <cstdlib>
+@@ -1295,6 +1296,17 @@ Error HWC2On1Adapter::Display::set(hwc_display_contents_1& hwcContents) {
+     if (clientTargetLayer.compositionType == HWC_FRAMEBUFFER_TARGET) {
+         clientTargetLayer.handle = mClientTarget.getBuffer();
+         clientTargetLayer.acquireFenceFd = mClientTarget.getFence();
++        // Some HWC1 implementations (MediaTek hwcomposer.mt6592) never close
++        // the FRAMEBUFFER_TARGET acquire fence they are given, leaking one
++        // sync_fence fd per GPU-composited frame until the composer runs out
++        // of fds and crashes (gralloc then fails to dlopen itself). Wait for
++        // the client target here and pass no fence, so the adapter keeps
++        // ownership of it. Overlay acquire fences are closed by the HWC.
++        if (clientTargetLayer.acquireFenceFd >= 0) {
++            sync_wait(clientTargetLayer.acquireFenceFd, 3000);
++            close(clientTargetLayer.acquireFenceFd);
++            clientTargetLayer.acquireFenceFd = -1;
++        }
+     } else {
+         ALOGE("[%" PRIu64 "] set: last HWC layer wasn't FRAMEBUFFER_TARGET",
+                 mId);
+-- 
+2.56.0
+

@@ -91,3 +91,8 @@ packages-apps-Backgrounds/0001-Backgrounds-load-downscaled-previews-for-the-wall
     1440p set, 2560x1440) for its small grid cells. On this tablet it used
     ~380 MB and half the frames took 250-950 ms (texture uploads to the
     Mali-450). Grid previews are now decoded downscaled: 81 MB, 2.4% janky.
+
+hardware-interfaces/0005-graphics-composer-hwc2on1adapter-own-the-client-targ.patch
+    hwcomposer.mt6592 never closes the framebuffer-target acquire fence, so
+    the composer leaked one fd per GPU-composited frame and crashed after
+    ~30k frames (UI restart). The adapter now waits for that fence itself.
