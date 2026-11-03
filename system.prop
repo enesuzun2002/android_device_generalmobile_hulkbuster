@@ -49,3 +49,10 @@ debug.hwui.use_buffer_age=false
 # The rear camera borrows the OV8858 feature table for its AF modes; hide
 # the upscaled picture sizes above the 5 MP S5K4E1GA.
 ro.vendor.camera0.max_picture_size=2560x1920
+
+# Low-RAM tuning (from the galaxys2-common Pie/21 trees):
+# fewer GCs in the foreground app, no GL driver preload in zygote (less RAM
+# per app process), and start background services one at a time.
+dalvik.vm.foreground-heap-growth-multiplier=2.0
+ro.zygote.disable_gl_preload=true
+ro.config.max_starting_bg=1
