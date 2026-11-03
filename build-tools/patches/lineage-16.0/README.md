@@ -112,3 +112,8 @@ frameworks-base/0002-SystemUI-allow-disabling-the-notification-launch-ani.patch
     persist.sys.notif_launch_anim=false (system.prop) replaces SystemUI's
     per-frame notification-to-app remote animation, which stuttered here,
     with the normal window transition.
+
+frameworks-base/0003-SystemUI-grow-the-notification-launch-animation-from.patch
+    The launch animation centred the expanding card horizontally, so on
+    this tablet's left-side notification panel it jumped sideways first.
+    It now grows from the notification's real position.

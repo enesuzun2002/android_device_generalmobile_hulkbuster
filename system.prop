@@ -57,10 +57,11 @@ dalvik.vm.foreground-heap-growth-multiplier=2.0
 ro.zygote.disable_gl_preload=true
 ro.config.max_starting_bg=1
 
-# Notification -> app launch: use the normal window transition instead of
-# SystemUI's per-frame remote animation, which stutters on HWC1/Mali-450
-# (frameworks/base patch adds the switch).
-persist.sys.notif_launch_anim=false
+# Notification -> app launch remote animation. It stuttered here until the
+# hwc2on1adapter tearing fix (hardware-interfaces 0007), and frameworks/base
+# 0003 makes it grow from the notification on this tablet's side panel. Set
+# to false to fall back to the plain window transition (frameworks/base 0002).
+persist.sys.notif_launch_anim=true
 # Front camera (GC2235) has no flash LED.
 ro.vendor.camera1.no_flash=true
 

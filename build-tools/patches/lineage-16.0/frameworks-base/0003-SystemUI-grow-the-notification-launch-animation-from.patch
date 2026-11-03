@@ -1,0 +1,59 @@
+From a9fafe33742f93505b4d864abee29ad2e7f5de85 Mon Sep 17 00:00:00 2001
+From: enesuzun2002 <emurat.uzun@gmail.com>
+Date: Wed, 4 Nov 2026 00:34:24 +0300
+Subject: [PATCH] SystemUI: grow the notification launch animation from the
+ notification
+
+The launch animation centred the expanding card horizontally, which only matches a full-width or centred notification panel. On a tablet with a side panel the card jumped sideways on the first frame. Interpolate the left edge from the notification's real position, and translate the row so its symmetric clipping stays under the window crop.
+
+Change-Id: I9b94de770e0629a1322c0f400ca82a90494819f9
+---
+ .../notification/ActivityLaunchAnimator.java  | 20 ++++++++++++++++++-
+ 1 file changed, 19 insertions(+), 1 deletion(-)
+
+diff --git a/packages/SystemUI/src/com/android/systemui/statusbar/notification/ActivityLaunchAnimator.java b/packages/SystemUI/src/com/android/systemui/statusbar/notification/ActivityLaunchAnimator.java
+index d7b67246..19a76409 100644
+--- a/packages/SystemUI/src/com/android/systemui/statusbar/notification/ActivityLaunchAnimator.java
++++ b/packages/SystemUI/src/com/android/systemui/statusbar/notification/ActivityLaunchAnimator.java
+@@ -180,8 +180,19 @@ public class ActivityLaunchAnimator {
+                                         mParams.linearProgress);
+                         int newWidth = (int) MathUtils.lerp(notificationWidth,
+                                 targetWidth, progress);
+-                        mParams.left = (int) ((targetWidth - newWidth) / 2.0f);
++                        // Grow from where the notification actually is. The
++                        // original centred the card horizontally, which only
++                        // matches a full-width or centred notification panel;
++                        // on a tablet with a side panel the card jumped.
++                        mParams.left = (int) MathUtils.lerp(
++                                mParams.startPosition[0] - primary.position.x, 0,
++                                progress);
+                         mParams.right = mParams.left + newWidth;
++                        // The row clips symmetrically around its own centre;
++                        // move it so it stays under the window crop.
++                        setSourceTranslationX(primary.position.x
++                                + (mParams.left + mParams.right) / 2.0f
++                                - (mParams.startPosition[0] + notificationWidth / 2.0f));
+                         mParams.top = (int) MathUtils.lerp(mParams.startPosition[1],
+                                 primary.position.y, progress);
+                         mParams.bottom = (int) MathUtils.lerp(mParams.startPosition[1]
+@@ -236,10 +247,17 @@ public class ActivityLaunchAnimator {
+             if (!running) {
+                 applyParamsToNotification(null);
+                 applyParamsToNotificationList(null);
++                setSourceTranslationX(0);
+             }
+ 
+         }
+ 
++        private void setSourceTranslationX(float x) {
++            ExpandableNotificationRow target = mSourceNotification.isChildInGroup()
++                    ? mSourceNotification.getNotificationParent() : mSourceNotification;
++            target.setTranslationX(x);
++        }
++
+         private void applyParamsToNotificationList(ExpandAnimationParameters params) {
+             mNotificationContainer.applyExpandAnimationParams(params);
+             mNotificationPanel.applyExpandAnimationParams(params);
+-- 
+2.56.0
+
