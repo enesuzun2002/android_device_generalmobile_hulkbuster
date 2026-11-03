@@ -97,7 +97,7 @@ hardware-interfaces/0005-graphics-composer-hwc2on1adapter-own-the-client-targ.pa
     the composer leaked one fd per GPU-composited frame and crashed after
     ~30k frames (UI restart). The adapter now waits for that fence itself.
 
-hardware-interfaces/0006-camera-device-hide-flash-modes-on-cameras-without-a.patch
+hardware-interfaces/0006-camera-device-hide-flash-modes-on-cameras-without-a-.patch
     The front camera got the rear camera's flash modes from a shared HAL1
     feature table; ro.vendor.camera1.no_flash=true limits it to "off".
 
