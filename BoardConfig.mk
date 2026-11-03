@@ -42,6 +42,9 @@ BOARD_CACHEIMAGE_PARTITION_SIZE := 134217728
 BOARD_CACHEIMAGE_FILE_SYSTEM_TYPE := ext4
 BOARD_FLASH_BLOCK_SIZE := 131072
 TARGET_USERIMAGES_USE_EXT4 := true
+# f2fs for /data (kernel has the f2fs-stable 3.10 backport): ships
+# make_f2fs/fsck.f2fs. Format without -O features; the backport predates them.
+TARGET_USERIMAGES_USE_F2FS := true
 
 # Kernel + ramdisk do not fit the 10 MB recovery partition with gzip.
 LZMA_RAMDISK_TARGETS := recovery
