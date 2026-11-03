@@ -7,7 +7,16 @@ here=$(cd "$(dirname "$0")" && pwd)
 root=${1:-$(cd "$here/../../../../../.." && pwd)}
 
 for dir in "$here"/*/; do
-    proj=$(basename "$dir" | sed 's#-#/#')        # frameworks-native -> frameworks/native
+    # frameworks-native -> frameworks/native, packages-apps-Backgrounds ->
+    # packages/apps/Backgrounds: turn '-' into '/' from the left until the
+    # project directory exists.
+    proj=$(basename "$dir")
+    while [ ! -d "$root/$proj" ]; do
+        case "$proj" in
+            *-*) proj=$(echo "$proj" | sed 's#-#/#') ;;
+            *) break ;;
+        esac
+    done
     for p in "$dir"*.patch; do
         if git -C "$root/$proj" apply --reverse --check "$p" 2>/dev/null; then
             echo "already applied: $proj $(basename "$p")"

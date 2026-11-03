@@ -1,0 +1,98 @@
+From 8de960a4a1e454fcc413b47af995709254de35ad Mon Sep 17 00:00:00 2001
+From: enesuzun2002 <emurat.uzun@gmail.com>
+Date: Tue, 3 Nov 2026 12:48:42 +0300
+Subject: [PATCH] Backgrounds: load downscaled previews for the wallpaper grid
+
+The grid decoded every built-in wallpaper at full size (up to 2560x1440)
+for a small cell, then drew it and extracted its palette from the
+full-size bitmap. On a 1 GB MT6592 tablet (Mali-450) the app used about
+380 MB and half the frames took 250-950 ms, mostly on texture uploads.
+Decode grid previews with inSampleSize (longest side >= 640 px) and ask
+WallpaperManager for a screen-shaped preview of the default wallpaper;
+ApplyActivity still loads the full image. Now 81 MB, 2.4% janky frames.
+
+Change-Id: I7f3206b278d382958e76874cb2963b528fd90c61
+---
+ .../factory/BuiltInWallpaperFactory.java      | 46 ++++++++++++++++++-
+ 1 file changed, 44 insertions(+), 2 deletions(-)
+
+diff --git a/app/src/main/java/org/lineageos/backgrounds/factory/BuiltInWallpaperFactory.java b/app/src/main/java/org/lineageos/backgrounds/factory/BuiltInWallpaperFactory.java
+index 7508d3c..1e7ff81 100644
+--- a/app/src/main/java/org/lineageos/backgrounds/factory/BuiltInWallpaperFactory.java
++++ b/app/src/main/java/org/lineageos/backgrounds/factory/BuiltInWallpaperFactory.java
+@@ -17,7 +17,11 @@ package org.lineageos.backgrounds.factory;
+ 
+ import android.app.WallpaperManager;
+ import android.content.res.Resources;
++import android.graphics.Bitmap;
++import android.graphics.BitmapFactory;
++import android.graphics.drawable.BitmapDrawable;
+ import android.graphics.drawable.Drawable;
++import android.util.DisplayMetrics;
+ 
+ import androidx.annotation.DrawableRes;
+ import androidx.annotation.NonNull;
+@@ -28,20 +32,58 @@ import org.lineageos.backgrounds.bundle.WallpaperType;
+ 
+ public final class BuiltInWallpaperFactory {
+ 
++    /*
++     * Longest side of the grid previews. The grid cells are small, but the
++     * built-in wallpapers are up to 2560x1440: decoding them at full size made
++     * every cell a 15 MB bitmap and a full-size GPU texture upload (~380 MB
++     * for the app and 250-600 ms frames on low-end GPUs).
++     */
++    private static final int PREVIEW_MAX_SIZE = 640;
++
+     private BuiltInWallpaperFactory() {
+     }
+ 
++    @NonNull
++    private static Drawable loadPreview(@NonNull final Resources res,
++                                        @DrawableRes final int drawableRes) {
++        final BitmapFactory.Options bounds = new BitmapFactory.Options();
++        bounds.inJustDecodeBounds = true;
++        BitmapFactory.decodeResource(res, drawableRes, bounds);
++        if (bounds.outWidth > 0 && bounds.outHeight > 0) {
++            int sample = 1;
++            while (Math.max(bounds.outWidth, bounds.outHeight) / (sample * 2) >= PREVIEW_MAX_SIZE) {
++                sample *= 2;
++            }
++            final BitmapFactory.Options opts = new BitmapFactory.Options();
++            opts.inSampleSize = sample;
++            final Bitmap bm = BitmapFactory.decodeResource(res, drawableRes, opts);
++            if (bm != null) {
++                return new BitmapDrawable(res, bm);
++            }
++        }
++        // Not a bitmap resource (e.g. xml): load it as is.
++        return res.getDrawable(drawableRes, res.newTheme());
++    }
++
+     public static WallpaperBundle build(@NonNull final String name,
+                                         @NonNull final Resources res,
+                                         @DrawableRes final int drawableRes) {
+-        Drawable drawable = res.getDrawable(drawableRes, res.newTheme());
++        Drawable drawable = loadPreview(res, drawableRes);
+         return new WallpaperBundle(name, drawable, drawableRes, WallpaperType.BUILT_IN);
+     }
+ 
+     public static WallpaperBundle buildDefault(@NonNull Resources res,
+                                                @NonNull WallpaperManager manager) {
+         final String name = res.getString(R.string.wallpaper_built_in_system);
+-        final Drawable drawable = manager.getBuiltInDrawable();
++        // Grid preview only: ApplyActivity loads the full-size image itself.
++        final DisplayMetrics dm = res.getDisplayMetrics();
++        final int longSide = Math.max(dm.widthPixels, dm.heightPixels);
++        final int scale = Math.max(1, (longSide + PREVIEW_MAX_SIZE - 1) / PREVIEW_MAX_SIZE);
++        Drawable drawable = manager.getBuiltInDrawable(dm.widthPixels / scale,
++                dm.heightPixels / scale, true, 0.5f, 0.5f);
++        if (drawable == null) {
++            drawable = manager.getBuiltInDrawable();
++        }
+ 
+         return new WallpaperBundle(name, drawable,
+                 WallpaperBundle.DESCRIPTOR_EMPTY, WallpaperType.DEFAULT);
+-- 
+2.56.0
+

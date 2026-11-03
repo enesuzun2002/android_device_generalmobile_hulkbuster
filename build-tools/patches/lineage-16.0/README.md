@@ -85,3 +85,9 @@ hardware-interfaces/0003-camera-device-translate-mtk-hal1-shutter-and-jpeg-ca.pa
 hardware-interfaces/0004-camera-device-cap-advertised-picture-sizes-per-camer.patch
     Hides picture sizes above ro.vendor.camera<id>.max_picture_size (the
     main camera's borrowed feature table lists upscaled sizes).
+
+packages-apps-Backgrounds/0001-Backgrounds-load-downscaled-previews-for-the-wallpap.patch
+    The Wallpapers app decoded every built-in wallpaper at full size (the
+    1440p set, 2560x1440) for its small grid cells. On this tablet it used
+    ~380 MB and half the frames took 250-950 ms (texture uploads to the
+    Mali-450). Grid previews are now decoded downscaled: 81 MB, 2.4% janky.
