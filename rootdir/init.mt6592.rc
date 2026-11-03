@@ -385,6 +385,11 @@ service conn_launcher /system/bin/6620_launcher -p /system/etc/firmware/
 on fs
     write /proc/bootprof "INIT:eMMC:Mount_START"
 
+    # Boot: big readahead and no I/O accounting while the system loads;
+    # both are set back to normal at boot_completed.
+    write /sys/block/mmcblk0/queue/read_ahead_kb 2048
+    write /sys/block/mmcblk0/queue/iostats 0
+
     mkdir /protect_f 0771 system system
     mkdir /protect_s 0771 system system
 
@@ -407,10 +412,11 @@ on property:wlan.driver.status=unloaded
 # (921600 baud, synchronous, IRQs off - ~1 ms per line). Lineage never
 # does it, so do it here.
 on property:sys.boot_completed=1
-    # zram swap (512 MB, MTK LZ4K codec). Pie's swapon_all needs the newer
-    # zram max_comp_streams node, which this 3.10 zram lacks, so set it up
-    # directly. Read single pages from swap, not clusters of 8.
-    write /sys/block/zram0/disksize 536870912
+    # zram swap: 1 GB (2 GB RAM), MTK LZ4K codec, one compression stream per
+    # core (multi-stream zcomp backport). Read single pages from swap, not
+    # clusters of 8.
+    write /sys/block/zram0/max_comp_streams 8
+    write /sys/block/zram0/disksize 1073741824
     exec - root root -- /system/bin/mkswap /dev/block/zram0
     exec - root root -- /system/bin/swapon /dev/block/zram0
     write /proc/sys/vm/page-cluster 0
@@ -431,6 +437,14 @@ on property:sys.boot_completed=1
     write /sys/block/mmcblk0/queue/scheduler deadline
     write /sys/block/mmcblk0/queue/scheduler bfq
     write /sys/block/mmcblk0/queue/read_ahead_kb 512
+    write /sys/block/mmcblk0/queue/iostats 1
+
+    # Memory: start background writeback early and in small batches (the
+    # eMMC stalls on large flushes), and prefer swapping to zram over
+    # dropping file pages that have to be read back from the slow eMMC.
+    write /proc/sys/vm/dirty_background_ratio 1
+    write /proc/sys/vm/dirty_ratio 10
+    write /proc/sys/vm/swappiness 100
 
 # Pie: wpa_supplicant lives in /vendor/bin/hw and is controlled over HIDL
 # (ISupplicant); the framework adds wlan0/p2p0 itself. Configs are migrated
