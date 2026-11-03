@@ -36,12 +36,13 @@ constexpr auto kInteractionBoost = std::chrono::milliseconds(1000);
 // CPU undervolt on top of MTK PTP (per-chip closed-loop voltage). PTP adds
 // mt_ptp_offset (units of 6.25 mV PMIC codes, clamped by the kernel to
 // 0.90..1.225 V) to every OPP. -17 once oopsed after ~48 min because the
-// middle OPPs had never been stress-tested at their lowered voltage. -15 was
-// validated per OPP: every frequency 728..1664 MHz capped in turn under an
-// 8-worker checksum stress (3 min each), a 25+ min bursty soak with idle and
-// frequency changes, and 5 min at the 1768 MHz turbo below, all clean.
+// middle OPPs had never been stress-tested at their lowered voltage. -15
+// passed per-OPP checksum stress, but with the turbo below (1768 MHz at the
+// top OPP's voltage) a memory-heavy verified fill (memstress) hit 3 bad pages
+// in 11 runs; -15 alone and turbo alone were clean. -10 + turbo: 0 bad pages
+// in 10 memstress runs plus combined GPU/memory/CPU load.
 constexpr const char* kPtpOffset = "/proc/ptp/ptp_offset";
-constexpr int kPtpOffset_ = -15;
+constexpr int kPtpOffset_ = -10;
 
 // Turbo: +104 MHz on the top OPP (1664 -> 1768 MHz). This unit's eFuse only
 // grants it with 1-2 cores online; the kernel's 5-8 core bonus (mt_cpufreq)
