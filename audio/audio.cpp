@@ -6,6 +6,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <dlfcn.h>
+#include <math.h>
+#include <cutils/properties.h>
 
 extern "C"
 {
@@ -34,6 +36,94 @@ extern "C"
 		ALOGI("MusicPlus=1 (%d), BesLoudness=1 (%d)", a, b);
 	}
 
+	/*
+	 * The MTK volume controller programs the analog output gain (headphone
+	 * buffer feeding the speaker amp) only inside setMasterVolume, for the
+	 * device routed at that moment. AudioFlinger sets master volume once at
+	 * load, before any routing (devices 0x0), and MTK's AudioPolicy that
+	 * re-applied it on every route change is not there, so the speaker gain
+	 * was never programmed. Re-send master volume after each routing change.
+	 */
+	static struct audio_hw_device *g_adev = NULL;
+
+	/*
+	 * Speaker digital boost. With the analog buffer already at its +9 dB
+	 * maximum (kernel hp_gain_floor) the speaker is still quiet, so scale the
+	 * PCM going to the speaker by persist.vendor.audio.spk_boost_mb (millibel,
+	 * default 200 = +2 dB; +6 dB clipped audibly) with saturation. Only while routed to the speaker.
+	 */
+	static volatile int g_spk_routed = 1;
+	static int32_t g_boost_q16 = 65536;
+	static ssize_t (*orig_out_write)(struct audio_stream_out *, const void *, size_t) = NULL;
+	static void *g_boost_buf = NULL;
+	static size_t g_boost_len = 0;
+
+	static void update_boost(void)
+	{
+		int mb = property_get_int32("persist.vendor.audio.spk_boost_mb", 200);
+		if (mb < 0) mb = 0;
+		if (mb > 1200) mb = 1200;
+		g_boost_q16 = (int32_t)(65536.0 * pow(10.0, mb / 2000.0));
+		ALOGI("speaker boost %d mB (q16 %d)", mb, g_boost_q16);
+	}
+
+	static ssize_t hulk_out_write(struct audio_stream_out *out, const void *buf, size_t bytes)
+	{
+		if (!g_spk_routed || g_boost_q16 <= 65536 || bytes == 0)
+			return orig_out_write(out, buf, bytes);
+		if (g_boost_len < bytes) {
+			void *n = realloc(g_boost_buf, bytes);
+			if (n == NULL)
+				return orig_out_write(out, buf, bytes);
+			g_boost_buf = n;
+			g_boost_len = bytes;
+		}
+		audio_format_t fmt = out->common.get_format(&out->common);
+		const int64_t g = g_boost_q16;
+		if (fmt == AUDIO_FORMAT_PCM_16_BIT) {
+			const int16_t *src = (const int16_t *)buf;
+			int16_t *dst = (int16_t *)g_boost_buf;
+			for (size_t i = 0; i < bytes / 2; i++) {
+				int64_t v = ((int64_t)src[i] * g) >> 16;
+				dst[i] = v > 32767 ? 32767 : (v < -32768 ? -32768 : (int16_t)v);
+			}
+		} else if (fmt == AUDIO_FORMAT_PCM_32_BIT || fmt == AUDIO_FORMAT_PCM_8_24_BIT) {
+			const int32_t lim = fmt == AUDIO_FORMAT_PCM_32_BIT ? INT32_MAX : 0x7fffff;
+			const int32_t *src = (const int32_t *)buf;
+			int32_t *dst = (int32_t *)g_boost_buf;
+			for (size_t i = 0; i < bytes / 4; i++) {
+				int64_t v = ((int64_t)src[i] * g) >> 16;
+				dst[i] = v > lim ? lim : (v < -(int64_t)lim - 1 ? -lim - 1 : (int32_t)v);
+			}
+		} else {
+			return orig_out_write(out, buf, bytes);
+		}
+		return orig_out_write(out, g_boost_buf, bytes);
+	}
+	static int (*orig_out_set_parameters)(struct audio_stream *, const char *) = NULL;
+
+	static int hulk_out_set_parameters(struct audio_stream *stream, const char *kv)
+	{
+		int ret = orig_out_set_parameters(stream, kv);
+		const char *r = kv != NULL ? strstr(kv, "routing=") : NULL;
+		if (r != NULL) {
+			int dev = atoi(r + 8);
+			g_spk_routed = (dev & AUDIO_DEVICE_OUT_SPEAKER) != 0 &&
+				(dev & (AUDIO_DEVICE_OUT_WIRED_HEADSET | AUDIO_DEVICE_OUT_WIRED_HEADPHONE)) == 0;
+			update_boost();
+		}
+		if (kv != NULL && strstr(kv, "routing=") != NULL && g_adev != NULL &&
+		    g_adev->set_master_volume != NULL) {
+			float v = 1.0f;
+			if (g_adev->get_master_volume == NULL ||
+			    g_adev->get_master_volume(g_adev, &v) != 0 || v <= 0.0f)
+				v = 1.0f;
+			int m = g_adev->set_master_volume(g_adev, v);
+			ALOGI("%s -> master volume %.2f reapplied (%d)", kv, v, m);
+		}
+		return ret;
+	}
+
 	static int hulk_open_output_stream(struct audio_hw_device *dev,
 			audio_io_handle_t handle, audio_devices_t devices,
 			audio_output_flags_t flags, struct audio_config *config,
@@ -41,8 +131,21 @@ extern "C"
 	{
 		int ret = orig_open_output_stream(dev, handle, devices, flags, config,
 				stream_out, address);
-		if (ret == 0)
+		if (ret == 0) {
 			apply_speaker_enhancement(dev);
+			struct audio_stream_out *out = *stream_out;
+			if (out != NULL && out->common.set_parameters != NULL &&
+			    out->common.set_parameters != hulk_out_set_parameters) {
+				orig_out_set_parameters = out->common.set_parameters;
+				out->common.set_parameters = hulk_out_set_parameters;
+			}
+			if (out != NULL && out->write != NULL && out->write != hulk_out_write &&
+			    (flags & AUDIO_OUTPUT_FLAG_PRIMARY)) {
+				orig_out_write = out->write;
+				out->write = hulk_out_write;
+				update_boost();
+			}
+		}
 		return ret;
 	}
 
@@ -69,6 +172,7 @@ extern "C"
 		if (ret == 0 && *device != NULL && name != NULL &&
 		    strcmp(name, AUDIO_HARDWARE_INTERFACE) == 0) {
 			struct audio_hw_device *adev = (struct audio_hw_device *)*device;
+			g_adev = adev;
 			if (adev->open_output_stream != NULL) {
 				orig_open_output_stream = adev->open_output_stream;
 				adev->open_output_stream = hulk_open_output_stream;
