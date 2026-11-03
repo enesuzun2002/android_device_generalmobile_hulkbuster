@@ -1,0 +1,183 @@
+From c7b676005bac2f044e606d993de5979f21b41474 Mon Sep 17 00:00:00 2001
+From: enesuzun2002 <emurat.uzun@gmail.com>
+Date: Wed, 4 Nov 2026 00:10:13 +0300
+Subject: [PATCH] graphics: composer: hwc2on1adapter: fix tearing on the mtk
+ hwc1 blob
+
+Merge the framebuffer target release fence into the retire fence, so SurfaceFlinger does not render into a framebuffer that is still being scanned out (GPU tile-row tearing). Reset the deferred retire fence on power mode changes. While the layer set or geometry changes, and while a SolidColor (dim) layer is present, compose everything on the GPU for 30 frames, because the MTK blob's overlay reprogramming times out on those frames and scans out half-updated layers.
+
+Change-Id: I3091325adff20771e82b8814c9fcbef322340901
+---
+ .../utils/hwc2on1adapter/HWC2On1Adapter.cpp   | 77 ++++++++++++++++++-
+ .../include/hwc2on1adapter/HWC2On1Adapter.h   | 16 +++-
+ 2 files changed, 88 insertions(+), 5 deletions(-)
+
+diff --git a/graphics/composer/2.1/utils/hwc2on1adapter/HWC2On1Adapter.cpp b/graphics/composer/2.1/utils/hwc2on1adapter/HWC2On1Adapter.cpp
+index b968a5f..7753a83 100644
+--- a/graphics/composer/2.1/utils/hwc2on1adapter/HWC2On1Adapter.cpp
++++ b/graphics/composer/2.1/utils/hwc2on1adapter/HWC2On1Adapter.cpp
+@@ -26,6 +26,7 @@
+ #include <inttypes.h>
+ #include <sync/sync.h>
+ 
++#include <cerrno>
+ #include <chrono>
+ #include <cstdlib>
+ #include <sstream>
+@@ -51,6 +52,9 @@ static hwc2_function_pointer_t asFP(T function)
+ 
+ using namespace HWC2;
+ 
++// Frames composed on the GPU after a layer/geometry change (see prepare()).
++static constexpr int kClientHoldFrames = 30;
++
+ static constexpr Attribute ColorMode = static_cast<Attribute>(6);
+ 
+ namespace android {
+@@ -529,7 +533,9 @@ HWC2On1Adapter::Display::Display(HWC2On1Adapter& device, HWC2::DisplayType type)
+     mHwc1LayerMap(),
+     mNumAvailableRects(0),
+     mNextAvailableRect(nullptr),
+-    mGeometryChanged(false)
++    mGeometryChanged(false),
++    mClientHoldFrames(0),
++    mSceneChanged(false)
+     {}
+ 
+ Error HWC2On1Adapter::Display::acceptChanges() {
+@@ -939,6 +945,13 @@ Error HWC2On1Adapter::Display::setPowerMode(PowerMode mode) {
+ 
+     ALOGV("[%" PRIu64 "] setPowerMode(%s)", mId, to_string(mode).c_str());
+     mPowerMode = mode;
++    // First frames after unblank: see prepare().
++    mClientHoldFrames = kClientHoldFrames;
++    // Retire fences queued before the power change include the framebuffer
++    // target release fence of the last frame before blank, which HWC1 only
++    // signals once a new frame is scanned out. Don't hand those to
++    // SurfaceFlinger after the mode change (black screen after wake).
++    mRetireFence = DeferredFence();
+     return Error::None;
+ }
+ 
+@@ -1236,6 +1249,34 @@ bool HWC2On1Adapter::Display::prepare() {
+         layer->applyState(hwc1Layer);
+     }
+ 
++    // The MTK HWC1 reprograms its overlay engine through a worker
++    // (UIComposeThread) whenever the layer set changes, and that worker
++    // regularly times out on such frames, scanning out half-updated
++    // layers (tearing on dialogs/dim, lock screen shown late after wake).
++    // While the layer set or geometry is changing, and while a dim
++    // (SolidColor) layer is present, compose everything on the GPU and
++    // only hand HWC1 the framebuffer target; go back to overlays once the
++    // scene has been stable for kClientHoldFrames frames.
++    bool unstable = mSceneChanged;
++    for (auto& layer : mLayers) {
++        if (layer->getCompositionType() == Composition::SolidColor) {
++            unstable = true;
++            break;
++        }
++    }
++    if (unstable) {
++        mClientHoldFrames = kClientHoldFrames;
++    }
++    if (mClientHoldFrames > 0) {
++        --mClientHoldFrames;
++        for (auto& layer : mLayers) {
++            auto& hwc1Layer =
++                    mHwc1RequestedContents->hwLayers[layer->getHwc1Id()];
++            hwc1Layer.compositionType = HWC_FRAMEBUFFER;
++            hwc1Layer.flags |= HWC_SKIP_LAYER;
++        }
++    }
++
+     prepareFramebufferTarget();
+ 
+     resetGeometryMarker();
+@@ -1987,7 +2028,7 @@ Error HWC2On1Adapter::Layer::setColor(hwc_color_t color) {
+ 
+ Error HWC2On1Adapter::Layer::setCompositionType(Composition type) {
+     mCompositionType = type;
+-    mDisplay.markGeometryChanged();
++    mDisplay.markCompositionChanged();
+     return Error::None;
+ }
+ 
+@@ -2530,9 +2571,39 @@ Error HWC2On1Adapter::setAllDisplays() {
+         auto displayId = mHwc1DisplayMap[hwc1Id];
+         auto& display = mDisplays[displayId];
+         auto retireFenceFd = mHwc1Contents[hwc1Id]->retireFenceFd;
++        // SurfaceFlinger releases the previous framebuffer target buffer on
++        // the present (retire) fence. The MTK HWC1 retire fence can signal
++        // before the display engine has stopped scanning that buffer out,
++        // so the GPU started rendering into the buffer on screen (tile-row
++        // tearing). Fold the framebuffer target's own release fence into the
++        // retire fence so the buffer is only reused once HWC1 released it.
++        auto& contents = *mHwc1Contents[hwc1Id];
++        for (size_t i = 0; i < contents.numHwLayers; ++i) {
++            auto& l = contents.hwLayers[i];
++            if (l.compositionType != HWC_FRAMEBUFFER_TARGET ||
++                    l.releaseFenceFd == -1) {
++                continue;
++            }
++            if (retireFenceFd == -1) {
++                retireFenceFd = l.releaseFenceFd;
++            } else {
++                int merged = sync_merge("hwc1_retire_fbt", retireFenceFd,
++                        l.releaseFenceFd);
++                if (merged >= 0) {
++                    close(retireFenceFd);
++                    close(l.releaseFenceFd);
++                    retireFenceFd = merged;
++                } else {
++                    ALOGE("setAllDisplays: sync_merge failed (%d)", errno);
++                    close(l.releaseFenceFd);
++                }
++            }
++            l.releaseFenceFd = -1;
++        }
++        contents.retireFenceFd = retireFenceFd;
+         ALOGV("setAllDisplays: Adding retire fence %d to display %zd",
+                 retireFenceFd, hwc1Id);
+-        display->addRetireFence(mHwc1Contents[hwc1Id]->retireFenceFd);
++        display->addRetireFence(retireFenceFd);
+         display->addReleaseFences(*mHwc1Contents[hwc1Id]);
+     }
+ 
+diff --git a/graphics/composer/2.1/utils/hwc2on1adapter/include/hwc2on1adapter/HWC2On1Adapter.h b/graphics/composer/2.1/utils/hwc2on1adapter/include/hwc2on1adapter/HWC2On1Adapter.h
+index 3badfce..a1cd1ec 100644
+--- a/graphics/composer/2.1/utils/hwc2on1adapter/include/hwc2on1adapter/HWC2On1Adapter.h
++++ b/graphics/composer/2.1/utils/hwc2on1adapter/include/hwc2on1adapter/HWC2On1Adapter.h
+@@ -276,8 +276,17 @@ private:
+ 
+             hwc_display_contents_1* getDisplayContents();
+ 
+-            void markGeometryChanged() { mGeometryChanged = true; }
+-            void resetGeometryMarker() { mGeometryChanged = false;}
++            void markGeometryChanged() {
++                mGeometryChanged = true;
++                mSceneChanged = true;
++            }
++            // A composition type change re-runs HWC1 geometry, but is not a
++            // scene change for the client-hold policy in prepare().
++            void markCompositionChanged() { mGeometryChanged = true; }
++            void resetGeometryMarker() {
++                mGeometryChanged = false;
++                mSceneChanged = false;
++            }
+         private:
+             class Config {
+                 public:
+@@ -458,6 +467,9 @@ private:
+             // updated with anything other than a buffer since last call to
+             // Display::set()
+             bool mGeometryChanged;
++            // Frames left to compose entirely on the GPU (see prepare())
++            int mClientHoldFrames;
++            bool mSceneChanged;
+     };
+ 
+     // Utility template calling a Display object method directly based on the
+-- 
+2.56.0
+

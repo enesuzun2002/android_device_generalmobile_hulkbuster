@@ -101,6 +101,13 @@ hardware-interfaces/0006-camera-device-hide-flash-modes-on-cameras-without-a-.pa
     The front camera got the rear camera's flash modes from a shared HAL1
     feature table; ro.vendor.camera1.no_flash=true limits it to "off".
 
+hardware-interfaces/0007-graphics-composer-hwc2on1adapter-fix-tearing-on-the-.patch
+    Tearing on dialogs/dim layers. The MTK retire fence signals before the
+    old framebuffer leaves scanout, so its FBT release fence is now merged in
+    (stale fences are dropped on power mode changes). The blob's overlay
+    reprogramming (UIComposeThread) times out when layers change, so those
+    frames and dim layers are GPU-composed for 30 frames, then overlays.
+
 frameworks-base/0002-SystemUI-allow-disabling-the-notification-launch-ani.patch
     persist.sys.notif_launch_anim=false (system.prop) replaces SystemUI's
     per-frame notification-to-app remote animation, which stuttered here,
