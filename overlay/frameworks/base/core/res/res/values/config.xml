@@ -255,4 +255,9 @@
     <string name="db_default_journal_mode" translatable="false">MEMORY</string>
     <string name="db_default_sync_mode" translatable="false">NORMAL</string>
     <string name="db_wal_sync_mode" translatable="false">NORMAL</string>
+    <!-- LMK: 2 GB RAM plus zram. AOSP's large-device minfree table starts
+         killing cached apps at 180 MB free; scale every level down by 25%
+         (top level 135 MB) so more apps stay cached and resume warm. -->
+    <integer name="config_lowMemoryKillerMinFreeKbytesAdjust">-46080</integer>
+
 </resources>
