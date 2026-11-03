@@ -1,0 +1,9 @@
+// Standalone prototype: decode H.264 Annex-B with MTK HW decoder by calling
+// libvcodecdrv.so directly (dlopen), no OMX.
+cc_binary {
+    name: "vdectest",
+    srcs: ["vdectest.cpp"],
+    include_dirs: ["frameworks/av/media/libstagefright/codecs/hulkavcdec"],
+    shared_libs: ["liblog"],
+    cflags: ["-Wall", "-Wno-unused-parameter"],
+}
