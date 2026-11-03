@@ -67,3 +67,11 @@ ro.vendor.camera1.no_flash=true
 
 # Wi-Fi only: no RIL / mobile networks (see overlay config_voice_capable).
 ro.radio.noril=yes
+
+# ART: compile apps fully ahead of time. speed-profile at install compiles
+# almost nothing (no profile yet), so app UI threads ran interpreted/JIT on
+# the A7 cores; YouTube went from 89% to 43% janky frames with speed. The
+# background job also targets speed, so apps verified at boot (after a ROM
+# flash) get fully compiled later while idle and charging.
+pm.dexopt.install=speed
+pm.dexopt.bg-dexopt=speed
