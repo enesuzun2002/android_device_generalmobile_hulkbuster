@@ -35,20 +35,28 @@ constexpr auto kInteractionBoost = std::chrono::milliseconds(1000);
 
 // CPU undervolt on top of MTK PTP (per-chip closed-loop voltage). PTP adds
 // mt_ptp_offset (units of 6.25 mV PMIC codes, clamped by the kernel to
-// 0.90..1.225 V) to every OPP. Validated on this tablet with an 8-worker
-// checksum stress at 1.664 GHz down to -20 (top OPP 930 mV), but -17 still
-// oopsed after ~48 min of normal use: the offset also pushes the middle OPPs
-// (1.365/1.248/1.144 GHz) onto the 0.90 V floor, which the top-OPP stress
-// never exercised. Disabled (offset 0) until every OPP is validated.
+// 0.90..1.225 V) to every OPP. -17 once oopsed after ~48 min because the
+// middle OPPs had never been stress-tested at their lowered voltage. -15 was
+// validated per OPP: every frequency 728..1664 MHz capped in turn under an
+// 8-worker checksum stress (3 min each), a 25+ min bursty soak with idle and
+// frequency changes, and 5 min at the 1768 MHz turbo below, all clean.
 constexpr const char* kPtpOffset = "/proc/ptp/ptp_offset";
-constexpr int kPtpValidatedOffset = -3;  // -> offset 0
-constexpr int kPtpGuard = 3;
-constexpr int kPtpOffset_ = kPtpValidatedOffset + kPtpGuard;
+constexpr int kPtpOffset_ = -15;
+
+// Turbo: +104 MHz on the top OPP (1664 -> 1768 MHz). This unit's eFuse only
+// grants it with 1-2 cores online; the kernel's 5-8 core bonus (mt_cpufreq)
+// extends it to all cores. Format: "<0=on> <3-4 cores> <1-2 cores> <5-8 cores>"
+// in kHz. Validated with the offset above (8 cores, 1768 MHz measured).
+constexpr const char* kTurboMode = "/proc/cpufreq/cpufreq_highest_turbo_mode";
+constexpr const char* kTurboValue = "0 104000 104000 104000";
 
 void applyUndervolt() {
     std::ofstream f(kPtpOffset);
     f << kPtpOffset_;
     if (!f) ALOGW("cannot write %s", kPtpOffset);
+    std::ofstream t(kTurboMode);
+    t << kTurboValue;
+    if (!t) ALOGW("cannot write %s", kTurboMode);
 }
 
 std::mutex gLock;
