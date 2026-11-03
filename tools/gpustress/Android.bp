@@ -13,3 +13,18 @@ cc_binary {
     srcs: ["memstress.cpp"],
     cflags: ["-Wall", "-Werror"],
 }
+
+// Physical register peek/poke through /dev/mem (DVFS bring-up only).
+cc_binary {
+    name: "physreg",
+    srcs: ["physreg.cpp"],
+    cflags: ["-Wall", "-Werror"],
+}
+
+// Set/get audio HAL parameters (MTK MusicPlus/BesLoudness tuning).
+cc_binary {
+    name: "audioparam",
+    srcs: ["audioparam.cpp"],
+    shared_libs: ["libaudioclient", "libutils", "libbinder"],
+    cflags: ["-Wall", "-Werror"],
+}
