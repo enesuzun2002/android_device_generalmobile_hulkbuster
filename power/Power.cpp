@@ -51,7 +51,18 @@ constexpr int kPtpOffset_ = -10;
 constexpr const char* kTurboMode = "/proc/cpufreq/cpufreq_highest_turbo_mode";
 constexpr const char* kTurboValue = "0 104000 104000 104000";
 
+// VCORE (GPU + SoC + DRAM controller) undervolt: MT6333 code, 0.7 V + code *
+// 6.25 mV. Stock is 0x44 (1.125 V). Every step down to 0x30 (1.000 V, the
+// kernel's lower bound) passed a GPU checksum load, a verified 1.1 GB memory
+// fill and 8-core CPU stress together; 0x34 (1.025 V) keeps 25 mV above the
+// lowest tested value and passed 5 more combined rounds.
+constexpr const char* kVcore = "/proc/cpufreq/socfreq_voltage";
+constexpr const char* kVcoreCode = "0x34";
+
 void applyUndervolt() {
+    std::ofstream v(kVcore);
+    v << kVcoreCode;
+    if (!v) ALOGW("cannot write %s", kVcore);
     std::ofstream f(kPtpOffset);
     f << kPtpOffset_;
     if (!f) ALOGW("cannot write %s", kPtpOffset);
