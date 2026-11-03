@@ -144,5 +144,20 @@ Only the three quirks included above are recognized at this point:
 
     -->
 
+    <!-- MT6592 hardware H.264 decoder: OMX component implemented in
+         frameworks/av/media/libstagefright/codecs/hulkavcdec, runs the VDEC
+         hardware through libvcodecdrv.so. Listed before the Google software
+         decoder so it is preferred. -->
+    <Decoders>
+        <MediaCodec name="OMX.hulk.h264.decoder" type="video/avc" >
+            <Limit name="size" min="64x64" max="1920x1088" />
+            <Limit name="alignment" value="2x2" />
+            <Limit name="block-size" value="16x16" />
+            <Limit name="blocks-per-second" min="1" max="489600" />
+            <Limit name="bitrate" range="1-40000000" />
+            <Feature name="adaptive-playback" />
+        </MediaCodec>
+    </Decoders>
+
     <Include href="media_codecs_google_video.xml" />
 </MediaCodecs>

@@ -1,0 +1,31 @@
+# Vendor additions to Pie's mediacodec seccomp filter (merged with
+# /system/etc/seccomp_policy/mediacodec.policy by main_codecservice.cpp).
+# The MTK video codec blobs (libvcodecdrv, libMtkOmxVenc/Vdec) query memory
+# size and set up their worker threads' scheduling, which the base policy
+# does not allow (SIGSYS -> media.codec abort):
+#   sysinfo           get_phys_pages() in eVEncDrvQueryCapability
+#   sched_getparam    MtkOmxVencThread / MtkOmxVdec threads
+sysinfo: 1
+sched_getparam: 1
+sched_setparam: 1
+sched_getscheduler: 1
+sched_getaffinity: 1
+sched_setaffinity: 1
+gettid: 1
+#   setrlimit         eValInit (libvcodec_utility) raises its own limits
+setrlimit: 1
+ugetrlimit: 1
+prlimit64: 1
+#   file/process calls libvcodec_utility and libMtkOmxVdec make while
+#   bringing up the decoder (eHalMCDICtrl fsync, debug dump dirs, pid/uid)
+fsync: 1
+fdatasync: 1
+mkdirat: 1
+fchmodat: 1
+fchmod: 1
+fchownat: 1
+unlinkat: 1
+getpid: 1
+geteuid32: 1
+getegid32: 1
+getgid32: 1

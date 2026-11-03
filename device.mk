@@ -191,6 +191,15 @@ PRODUCT_COPY_FILES += \
     frameworks/av/media/libstagefright/data/media_codecs_google_video_le.xml:system/etc/media_codecs_google_video.xml \
     $(DEVICE_PATH)/configs/media_profiles.xml:system/etc/media_profiles.xml	
 
+# MT6592 hardware H.264 decoder (frameworks/av codecs/hulkavcdec, driven
+# through libvcodecdrv) and the extra syscalls the MTK codec libraries make
+# inside the seccomp-filtered media.codec service.
+PRODUCT_PACKAGES += \
+    libstagefright_soft_hulkavcdec
+
+PRODUCT_COPY_FILES += \
+    $(DEVICE_PATH)/seccomp/mediacodec.policy:$(TARGET_COPY_OUT_VENDOR)/etc/seccomp_policy/mediacodec.policy
+
 # USB
 PRODUCT_DEFAULT_PROPERTY_OVERRIDES += persist.sys.usb.config=mtp,adb
 
