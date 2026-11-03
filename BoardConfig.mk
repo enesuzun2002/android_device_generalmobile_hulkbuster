@@ -82,3 +82,7 @@ TW_EXCLUDE_PYTHON := true
 TW_EXCLUDE_TZDATA := true
 TW_EXCLUDE_ENCRYPTED_BACKUPS := true
 TW_NO_EXFAT_FUSE := true
+
+# f2fs: the kernel has the f2fs-stable 3.10 backport; include mkfs.f2fs/fsck.f2fs
+# so /data can be formatted f2fs (no -O features: the backport predates them).
+TARGET_USERIMAGES_USE_F2FS := true
