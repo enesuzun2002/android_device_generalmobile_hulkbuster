@@ -165,9 +165,20 @@ Power::Power() {
     applyUndervolt();
 }
 
+// MTK 3.10 earlysuspend: writing "mem" to /sys/power/state (what Pie's
+// libsuspend does to sleep) also runs the early-suspend handlers, which power
+// the display path down (mtkfb). They only run their late-resume side on an
+// explicit "on", which nothing in Pie writes, so after a real suspend the
+// panel stayed off while Android turned the backlight on (black screen, lit
+// keys). Request "on" whenever the screen turns on; a no-op otherwise.
+constexpr const char* kPowerState = "/sys/power/state";
+
 Return<void> Power::setInteractive(bool interactive) {
     ALOGV("setInteractive(%d)", interactive);
-    if (interactive) applyUndervolt();
+    if (interactive) {
+        if (!writeFile(kPowerState, "on")) ALOGW("cannot write %s", kPowerState);
+        applyUndervolt();
+    }
     setFloor(interactive ? kScreenOnCores : kScreenOffCores);
     return Void();
 }
