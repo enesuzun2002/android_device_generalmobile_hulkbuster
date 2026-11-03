@@ -63,3 +63,6 @@ ro.config.max_starting_bg=1
 persist.sys.notif_launch_anim=false
 # Front camera (GC2235) has no flash LED.
 ro.vendor.camera1.no_flash=true
+
+# Wi-Fi only: no RIL / mobile networks (see overlay config_voice_capable).
+ro.radio.noril=yes

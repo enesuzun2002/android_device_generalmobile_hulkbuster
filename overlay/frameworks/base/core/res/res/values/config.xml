@@ -260,4 +260,10 @@
          (top level 135 MB) so more apps stay cached and resume warm. -->
     <integer name="config_lowMemoryKillerMinFreeKbytesAdjust">-46080</integer>
 
+    <!-- Wi-Fi only tablet (no modem): no voice or SMS. With ro.radio.noril
+         this makes TelephonyManager report 0 phones, so no RIL is created
+         (it kept retrying a radio HAL that does not exist). -->
+    <bool name="config_voice_capable">false</bool>
+    <bool name="config_sms_capable">false</bool>
+
 </resources>
