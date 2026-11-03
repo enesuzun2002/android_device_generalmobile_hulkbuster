@@ -56,3 +56,10 @@ ro.vendor.camera0.max_picture_size=2560x1920
 dalvik.vm.foreground-heap-growth-multiplier=2.0
 ro.zygote.disable_gl_preload=true
 ro.config.max_starting_bg=1
+
+# Notification -> app launch: use the normal window transition instead of
+# SystemUI's per-frame remote animation, which stutters on HWC1/Mali-450
+# (frameworks/base patch adds the switch).
+persist.sys.notif_launch_anim=false
+# Front camera (GC2235) has no flash LED.
+ro.vendor.camera1.no_flash=true

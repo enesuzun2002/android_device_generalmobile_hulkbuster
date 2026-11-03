@@ -1,0 +1,43 @@
+From 2fe18ff379f17eae870e32e6064b4a0401fc73fc Mon Sep 17 00:00:00 2001
+From: enesuzun2002 <emurat.uzun@gmail.com>
+Date: Tue, 3 Nov 2026 22:20:04 +0300
+Subject: [PATCH] SystemUI: allow disabling the notification launch animation
+
+The notification-to-app remote animation drives a SurfaceControl
+transaction per frame from SystemUI and stutters on slow HWC1/GPU
+devices. With persist.sys.notif_launch_anim=false launches from
+notifications use the normal window transition.
+
+Change-Id: I2002eb6e034201cd8db93eb3e0cc5451b71cf4b0
+---
+ .../statusbar/notification/ActivityLaunchAnimator.java     | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/packages/SystemUI/src/com/android/systemui/statusbar/notification/ActivityLaunchAnimator.java b/packages/SystemUI/src/com/android/systemui/statusbar/notification/ActivityLaunchAnimator.java
+index 93646ab4..d7b67246 100644
+--- a/packages/SystemUI/src/com/android/systemui/statusbar/notification/ActivityLaunchAnimator.java
++++ b/packages/SystemUI/src/com/android/systemui/statusbar/notification/ActivityLaunchAnimator.java
+@@ -26,6 +26,7 @@ import android.os.RemoteException;
+ import android.util.MathUtils;
+ import android.view.IRemoteAnimationFinishedCallback;
+ import android.view.IRemoteAnimationRunner;
++import android.os.SystemProperties;
+ import android.view.RemoteAnimationAdapter;
+ import android.view.RemoteAnimationTarget;
+ 
+@@ -81,6 +82,12 @@ public class ActivityLaunchAnimator {
+         if (mStatusBar.getBarState() != StatusBarState.SHADE || occluded) {
+             return null;
+         }
++        // The notification-to-app remote animation drives a SurfaceControl
++        // transaction per frame from SystemUI, which stutters on slow
++        // HWC1/GPU devices. Let them fall back to the normal window transition.
++        if (!SystemProperties.getBoolean("persist.sys.notif_launch_anim", true)) {
++            return null;
++        }
+         AnimationRunner animationRunner = new AnimationRunner(sourceNotification);
+         return new RemoteAnimationAdapter(animationRunner, ANIMATION_DURATION,
+                 ANIMATION_DURATION - 150 /* statusBarTransitionDelay */);
+-- 
+2.56.0
+

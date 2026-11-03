@@ -96,3 +96,12 @@ hardware-interfaces/0005-graphics-composer-hwc2on1adapter-own-the-client-targ.pa
     hwcomposer.mt6592 never closes the framebuffer-target acquire fence, so
     the composer leaked one fd per GPU-composited frame and crashed after
     ~30k frames (UI restart). The adapter now waits for that fence itself.
+
+hardware-interfaces/0006-camera-device-hide-flash-modes-on-cameras-without-a.patch
+    The front camera got the rear camera's flash modes from a shared HAL1
+    feature table; ro.vendor.camera1.no_flash=true limits it to "off".
+
+frameworks-base/0002-SystemUI-allow-disabling-the-notification-launch-ani.patch
+    persist.sys.notif_launch_anim=false (system.prop) replaces SystemUI's
+    per-frame notification-to-app remote animation, which stuttered here,
+    with the normal window transition.
