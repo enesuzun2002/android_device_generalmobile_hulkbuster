@@ -1,0 +1,35 @@
+From 6529fe10281fd60511fb537a76eee55078caf394 Mon Sep 17 00:00:00 2001
+From: enesuzun2002 <emurat.uzun@gmail.com>
+Date: Wed, 4 Nov 2026 02:46:41 +0300
+Subject: [PATCH 4/4] stagefright: advertise up to level 4.2 on
+ OMX.hulk.h264.decoder
+
+Change-Id: Iee674dd40a634bc7ff061879bb56c58c7605e8dc
+---
+ .../codecs/hulkavcdec/SoftHulkAVCDec.cpp               | 10 +++++-----
+ 1 file changed, 5 insertions(+), 5 deletions(-)
+
+diff --git a/media/libstagefright/codecs/hulkavcdec/SoftHulkAVCDec.cpp b/media/libstagefright/codecs/hulkavcdec/SoftHulkAVCDec.cpp
+index 9940782..33f5b34 100644
+--- a/media/libstagefright/codecs/hulkavcdec/SoftHulkAVCDec.cpp
++++ b/media/libstagefright/codecs/hulkavcdec/SoftHulkAVCDec.cpp
+@@ -38,11 +38,11 @@ static const uint32_t kMemType = 2;  // as validated with vdectest; CPU view is
+ static const int kMaxFbs = 24;
+ 
+ static const CodecProfileLevel kProfileLevels[] = {
+-    { OMX_VIDEO_AVCProfileConstrainedBaseline, OMX_VIDEO_AVCLevel41 },
+-    { OMX_VIDEO_AVCProfileBaseline, OMX_VIDEO_AVCLevel41 },
+-    { OMX_VIDEO_AVCProfileMain,     OMX_VIDEO_AVCLevel41 },
+-    { OMX_VIDEO_AVCProfileConstrainedHigh, OMX_VIDEO_AVCLevel41 },
+-    { OMX_VIDEO_AVCProfileHigh,     OMX_VIDEO_AVCLevel41 },
++    { OMX_VIDEO_AVCProfileConstrainedBaseline, OMX_VIDEO_AVCLevel42 },
++    { OMX_VIDEO_AVCProfileBaseline, OMX_VIDEO_AVCLevel42 },
++    { OMX_VIDEO_AVCProfileMain,     OMX_VIDEO_AVCLevel42 },
++    { OMX_VIDEO_AVCProfileConstrainedHigh, OMX_VIDEO_AVCLevel42 },
++    { OMX_VIDEO_AVCProfileHigh,     OMX_VIDEO_AVCLevel42 },
+ };
+ 
+ // ---------------------------------------------------------------------------
+-- 
+2.56.0
+

@@ -1,0 +1,1146 @@
+From 975dffe7910f9c2cea5c3a9ef429a31cfff7148f Mon Sep 17 00:00:00 2001
+From: enesuzun2002 <emurat.uzun@gmail.com>
+Date: Wed, 4 Nov 2026 01:41:15 +0300
+Subject: [PATCH 2/4] stagefright: add OMX.hulk.h264.decoder for MT6592
+ hardware decode
+
+Change-Id: Ida1530d37a6b110c9a8ea3dbcd73dc077f7b4a64
+---
+ .../codecs/hulkavcdec/Android.bp              |  38 +
+ .../codecs/hulkavcdec/HulkDetile.h            | 103 +++
+ .../codecs/hulkavcdec/SoftHulkAVCDec.cpp      | 773 ++++++++++++++++++
+ .../codecs/hulkavcdec/SoftHulkAVCDec.h        | 136 +++
+ .../codecs/hulkavcdec/exports.lds             |   5 +
+ media/libstagefright/omx/SoftOMXPlugin.cpp    |   1 +
+ .../stagefright/omx/SimpleSoftOMXComponent.h  |   6 +-
+ 7 files changed, 1059 insertions(+), 3 deletions(-)
+ create mode 100644 media/libstagefright/codecs/hulkavcdec/Android.bp
+ create mode 100644 media/libstagefright/codecs/hulkavcdec/HulkDetile.h
+ create mode 100644 media/libstagefright/codecs/hulkavcdec/SoftHulkAVCDec.cpp
+ create mode 100644 media/libstagefright/codecs/hulkavcdec/SoftHulkAVCDec.h
+ create mode 100644 media/libstagefright/codecs/hulkavcdec/exports.lds
+
+diff --git a/media/libstagefright/codecs/hulkavcdec/Android.bp b/media/libstagefright/codecs/hulkavcdec/Android.bp
+new file mode 100644
+index 0000000..65ac8cb
+--- /dev/null
++++ b/media/libstagefright/codecs/hulkavcdec/Android.bp
+@@ -0,0 +1,38 @@
++cc_library_shared {
++    name: "libstagefright_soft_hulkavcdec",
++    vendor_available: true,
++    vndk: {
++        enabled: true,
++    },
++
++    srcs: ["SoftHulkAVCDec.cpp"],
++
++    cflags: [
++        "-Wall",
++        "-Werror",
++    ],
++
++    version_script: "exports.lds",
++
++    include_dirs: [
++        "frameworks/av/media/libstagefright/include",
++        "frameworks/native/include/media/openmax",
++    ],
++
++    shared_libs: [
++        "libstagefright_omx",
++        "libstagefright_foundation",
++        "libutils",
++        "libcutils",
++        "liblog",
++    ],
++
++    sanitize: {
++        misc_undefined: [
++            "signed-integer-overflow",
++        ],
++    },
++
++    ldflags: ["-Wl,-Bsymbolic"],
++    compile_multilib: "32",
++}
+diff --git a/media/libstagefright/codecs/hulkavcdec/HulkDetile.h b/media/libstagefright/codecs/hulkavcdec/HulkDetile.h
+new file mode 100644
+index 0000000..b9f9529
+--- /dev/null
++++ b/media/libstagefright/codecs/hulkavcdec/HulkDetile.h
+@@ -0,0 +1,103 @@
++/*
++ * Conversion from the MediaTek "block" frame layout produced by libvcodecdrv
++ * (Y: 16x32 byte tiles, UV: NV12-interleaved 16x16 byte tiles, both in raster
++ * order) to cropped planar I420 with arbitrary destination strides.
++ */
++#ifndef HULK_DETILE_H_
++#define HULK_DETILE_H_
++
++#include <stddef.h>
++#include <stdint.h>
++#include <string.h>
++#if defined(__ARM_NEON__) || defined(__ARM_NEON)
++#include <arm_neon.h>
++#endif
++
++static inline void hulkDetileI420(
++        const uint8_t *src, int srcStride, int srcSliceH, int w, int h,
++        uint8_t *dstY, int dstYStride, uint8_t *dstU, uint8_t *dstV, int dstCStride) {
++    const int tilesPerRow = srcStride / 16;
++
++    // ---- luma ----
++    for (int y0 = 0; y0 < h; y0 += 32) {
++        const int rows = (h - y0) < 32 ? (h - y0) : 32;
++        const uint8_t *tileRow = src + (size_t)(y0 >> 5) * tilesPerRow * 512;
++        uint8_t *d = dstY + (size_t)y0 * dstYStride;
++        for (int bx = 0; bx * 16 < w; bx++) {
++            const uint8_t *t = tileRow + (size_t)bx * 512;
++            uint8_t *dd = d + bx * 16;
++            const int n = (w - bx * 16) < 16 ? (w - bx * 16) : 16;
++            if (n == 16) {
++#if defined(__ARM_NEON__) || defined(__ARM_NEON)
++                __builtin_prefetch(t + 512 * 2);
++                __builtin_prefetch(t + 512 * 2 + 64);
++                __builtin_prefetch(t + 512 * 2 + 128);
++                __builtin_prefetch(t + 512 * 2 + 192);
++                __builtin_prefetch(t + 512 * 2 + 256);
++                __builtin_prefetch(t + 512 * 2 + 320);
++                __builtin_prefetch(t + 512 * 2 + 384);
++                __builtin_prefetch(t + 512 * 2 + 448);
++                int r = 0;
++                for (; r + 8 <= rows; r += 8) {
++                    uint8x16_t a0 = vld1q_u8(t + r * 16 + 0), a1 = vld1q_u8(t + r * 16 + 16);
++                    uint8x16_t a2 = vld1q_u8(t + r * 16 + 32), a3 = vld1q_u8(t + r * 16 + 48);
++                    uint8x16_t a4 = vld1q_u8(t + r * 16 + 64), a5 = vld1q_u8(t + r * 16 + 80);
++                    uint8x16_t a6 = vld1q_u8(t + r * 16 + 96), a7 = vld1q_u8(t + r * 16 + 112);
++                    uint8_t *o = dd + (size_t)r * dstYStride;
++                    vst1q_u8(o, a0); o += dstYStride; vst1q_u8(o, a1); o += dstYStride;
++                    vst1q_u8(o, a2); o += dstYStride; vst1q_u8(o, a3); o += dstYStride;
++                    vst1q_u8(o, a4); o += dstYStride; vst1q_u8(o, a5); o += dstYStride;
++                    vst1q_u8(o, a6); o += dstYStride; vst1q_u8(o, a7);
++                }
++                for (; r < rows; r++) {
++                    vst1q_u8(dd + (size_t)r * dstYStride, vld1q_u8(t + r * 16));
++                }
++#else
++                for (int r = 0; r < rows; r++) {
++                    memcpy(dd + (size_t)r * dstYStride, t + r * 16, 16);
++                }
++#endif
++            } else {
++                for (int r = 0; r < rows; r++) {
++                    memcpy(dd + (size_t)r * dstYStride, t + r * 16, n);
++                }
++            }
++        }
++    }
++
++    // ---- chroma ----
++    const int cw = w / 2, ch = h / 2;
++    const uint8_t *uvBase = src + (size_t)srcStride * srcSliceH;
++    for (int y0 = 0; y0 < ch; y0 += 16) {
++        const int rows = (ch - y0) < 16 ? (ch - y0) : 16;
++        const uint8_t *tileRow = uvBase + (size_t)(y0 >> 4) * tilesPerRow * 256;
++        uint8_t *du = dstU + (size_t)y0 * dstCStride;
++        uint8_t *dv = dstV + (size_t)y0 * dstCStride;
++        for (int bx = 0; bx * 8 < cw; bx++) {
++            const uint8_t *t = tileRow + (size_t)bx * 256;
++            const int n = (cw - bx * 8) < 8 ? (cw - bx * 8) : 8;
++            if (n == 8) {
++#if defined(__ARM_NEON__) || defined(__ARM_NEON)
++                __builtin_prefetch(t + 256 * 2);
++                __builtin_prefetch(t + 256 * 2 + 64);
++                __builtin_prefetch(t + 256 * 2 + 128);
++                __builtin_prefetch(t + 256 * 2 + 192);
++                for (int r = 0; r < rows; r++) {
++                    uint8x8x2_t p = vld2_u8(t + r * 16);
++                    vst1_u8(du + (size_t)r * dstCStride + bx * 8, p.val[0]);
++                    vst1_u8(dv + (size_t)r * dstCStride + bx * 8, p.val[1]);
++                }
++                continue;
++#endif
++            }
++            for (int r = 0; r < rows; r++) {
++                for (int i = 0; i < n; i++) {
++                    du[(size_t)r * dstCStride + bx * 8 + i] = t[r * 16 + 2 * i];
++                    dv[(size_t)r * dstCStride + bx * 8 + i] = t[r * 16 + 2 * i + 1];
++                }
++            }
++        }
++    }
++}
++
++#endif  // HULK_DETILE_H_
+diff --git a/media/libstagefright/codecs/hulkavcdec/SoftHulkAVCDec.cpp b/media/libstagefright/codecs/hulkavcdec/SoftHulkAVCDec.cpp
+new file mode 100644
+index 0000000..cc35e7a
+--- /dev/null
++++ b/media/libstagefright/codecs/hulkavcdec/SoftHulkAVCDec.cpp
+@@ -0,0 +1,773 @@
++/*
++ * H.264 decoder OMX component backed by the MediaTek MT6592 hardware decoder.
++ *
++ * The decoder is driven through libvcodecdrv.so / libvcodec_utility.so which
++ * are dlopen()ed at runtime. Output frames come out of the hardware in MTK
++ * "block" format and are converted to I420 by a small worker thread so that
++ * the conversion of frame N overlaps with the hardware decoding of frame N+1.
++ */
++
++//#define LOG_NDEBUG 0
++#define LOG_TAG "SoftHulkAVCDec"
++#include <utils/Log.h>
++
++#include "SoftHulkAVCDec.h"
++#include "HulkDetile.h"
++
++#include <media/stagefright/foundation/ADebug.h>
++#include <media/stagefright/MediaDefs.h>
++#include <OMX_VideoExt.h>
++
++#include <cutils/properties.h>
++#include <dlfcn.h>
++#include <stdio.h>
++#include <pthread.h>
++#include <string.h>
++
++namespace android {
++
++#define componentName "video_decoder.avc"
++#define codingType    OMX_VIDEO_CodingAVC
++
++static const uint32_t kBsSize = 2 * 1024 * 1024;
++static const uint32_t kMemType = 2;  // as validated with vdectest; CPU view is cached, we invalidate explicitly
++static const int kMaxFbs = 24;
++
++static const CodecProfileLevel kProfileLevels[] = {
++    { OMX_VIDEO_AVCProfileConstrainedBaseline, OMX_VIDEO_AVCLevel41 },
++    { OMX_VIDEO_AVCProfileBaseline, OMX_VIDEO_AVCLevel41 },
++    { OMX_VIDEO_AVCProfileMain,     OMX_VIDEO_AVCLevel41 },
++    { OMX_VIDEO_AVCProfileConstrainedHigh, OMX_VIDEO_AVCLevel41 },
++    { OMX_VIDEO_AVCProfileHigh,     OMX_VIDEO_AVCLevel41 },
++};
++
++// ---------------------------------------------------------------------------
++// runtime-loaded driver entry points
++// ---------------------------------------------------------------------------
++typedef int (*pfnCreate)(void **h, uint32_t codec);
++typedef int (*pfnSet)(void *h, uint32_t type, void *p, void *p2);
++typedef int (*pfnInit)(void *h, void *bs, void *out);
++typedef int (*pfnDecode)(void *h, void *bs, void *fb);
++typedef int (*pfnGet)(void *h, uint32_t type, void *p, void *out);
++typedef int (*pfnOne)(void *h);
++typedef int (*pfnMem)(void *m, uint32_t sz);
++typedef int (*pfnCache)(void *m, uint32_t sz, uint32_t mode);
++
++static struct {
++    pfnCreate create;
++    pfnSet set;
++    pfnInit init;
++    pfnDecode decode;
++    pfnGet get;
++    pfnOne deinit, release;
++    pfnMem alloc, free;
++    pfnCache flush, inval;
++    bool ok;
++} gDrv;
++
++static pthread_once_t gOnce = PTHREAD_ONCE_INIT;
++
++static void *openLib(const char *name) {
++    char path[128];
++    static const char *dirs[] = { "/vendor/lib/", "/system/lib/", "" };
++    for (size_t i = 0; i < sizeof(dirs) / sizeof(dirs[0]); i++) {
++        snprintf(path, sizeof(path), "%s%s", dirs[i], name);
++        void *h = dlopen(path, RTLD_NOW | RTLD_GLOBAL);
++        if (h) return h;
++    }
++    ALOGE("dlopen(%s) failed: %s", name, dlerror());
++    return NULL;
++}
++
++static void loadDriverOnce() {
++    void *dl = openLib("libvcodecdrv.so");
++    void *ut = openLib("libvcodec_utility.so");
++    if (!dl || !ut) return;
++    gDrv.create = (pfnCreate)dlsym(dl, "eVDecDrvCreate");
++    gDrv.set = (pfnSet)dlsym(dl, "eVDecDrvSetParam");
++    gDrv.init = (pfnInit)dlsym(dl, "eVDecDrvInit");
++    gDrv.decode = (pfnDecode)dlsym(dl, "eVDecDrvDecode");
++    gDrv.get = (pfnGet)dlsym(dl, "eVDecDrvGetParam");
++    gDrv.deinit = (pfnOne)dlsym(dl, "eVDecDrvDeInit");
++    gDrv.release = (pfnOne)dlsym(dl, "eVDecDrvRelease");
++    gDrv.alloc = (pfnMem)dlsym(ut, "eVideoMemAlloc");
++    gDrv.free = (pfnMem)dlsym(ut, "eVideoMemFree");
++    gDrv.flush = (pfnCache)dlsym(ut, "eVideoFlushCache");
++    gDrv.inval = (pfnCache)dlsym(ut, "eVideoInvalidateCache");
++    gDrv.ok = gDrv.create && gDrv.set && gDrv.init && gDrv.decode && gDrv.get && gDrv.deinit &&
++              gDrv.release && gDrv.alloc && gDrv.free && gDrv.flush && gDrv.inval;
++    if (!gDrv.ok) ALOGE("missing driver symbols");
++}
++
++bool SoftHulkAVC::loadDriver() {
++    pthread_once(&gOnce, loadDriverOnce);
++    return gDrv.ok;
++}
++
++// ---------------------------------------------------------------------------
++// minimal SPS parser (dimensions + cropping only)
++// ---------------------------------------------------------------------------
++namespace {
++struct BitReader {
++    const uint8_t *d; size_t nbits; size_t pos;
++    BitReader(const uint8_t *data, size_t n) : d(data), nbits(n * 8), pos(0) {}
++    uint32_t bit() { if (pos >= nbits) { pos++; return 0; } uint32_t b = (d[pos >> 3] >> (7 - (pos & 7))) & 1; pos++; return b; }
++    uint32_t bits(int n) { uint32_t v = 0; while (n--) v = (v << 1) | bit(); return v; }
++    uint32_t ue() {
++        int z = 0;
++        while (!bit() && z < 32 && pos <= nbits) z++;
++        if (z == 0) return 0;
++        return ((1u << z) - 1) + bits(z);
++    }
++    int32_t se() { uint32_t k = ue(); return (k & 1) ? (int32_t)((k + 1) >> 1) : -(int32_t)(k >> 1); }
++    bool overrun() const { return pos > nbits; }
++};
++
++void skipScalingList(BitReader &br, int size) {
++    int last = 8, next = 8;
++    for (int j = 0; j < size; j++) {
++        if (next != 0) {
++            int delta = br.se();
++            next = (last + delta + 256) % 256;
++        }
++        last = (next == 0) ? last : next;
++    }
++}
++
++// nal: points at NAL header byte
++bool parseSps(const uint8_t *nal, size_t n, int *w, int *h, int *codedW, int *codedH) {
++    if (n < 5) return false;
++    std::vector<uint8_t> rbsp;
++    rbsp.reserve(n);
++    int zeros = 0;
++    for (size_t i = 1; i < n; i++) {
++        if (zeros >= 2 && nal[i] == 3) { zeros = 0; continue; }
++        zeros = nal[i] == 0 ? zeros + 1 : 0;
++        rbsp.push_back(nal[i]);
++    }
++    BitReader br(rbsp.data(), rbsp.size());
++    uint32_t profile = br.bits(8);
++    br.bits(8);
++    br.bits(8);
++    br.ue();
++    uint32_t chroma = 1;
++    if (profile == 100 || profile == 110 || profile == 122 || profile == 244 || profile == 44 ||
++        profile == 83 || profile == 86 || profile == 118 || profile == 128 || profile == 138 ||
++        profile == 139 || profile == 134 || profile == 135) {
++        chroma = br.ue();
++        if (chroma == 3) br.bit();
++        br.ue();
++        br.ue();
++        br.bit();
++        if (br.bit()) {
++            int cnt = (chroma != 3) ? 8 : 12;
++            for (int i = 0; i < cnt; i++) {
++                if (br.bit()) skipScalingList(br, i < 6 ? 16 : 64);
++            }
++        }
++    }
++    br.ue();
++    uint32_t poc = br.ue();
++    if (poc == 0) {
++        br.ue();
++    } else if (poc == 1) {
++        br.bit(); br.se(); br.se();
++        uint32_t cnt = br.ue();
++        for (uint32_t i = 0; i < cnt && i < 256; i++) br.se();
++    }
++    br.ue();
++    br.bit();
++    uint32_t wm = br.ue(), hm = br.ue();
++    uint32_t fmo = br.bit();
++    if (!fmo) { br.bit(); }
++    br.bit();
++    uint32_t cl = 0, cr = 0, ct = 0, cb = 0;
++    if (br.bit()) { cl = br.ue(); cr = br.ue(); ct = br.ue(); cb = br.ue(); }
++    if (br.overrun() || wm > 511 || hm > 511) return false;
++    int cux = (chroma == 0 || chroma == 3) ? 1 : 2;
++    int cuy = ((chroma == 1) ? 2 : 1) * (2 - (int)fmo);
++    if (chroma == 0) cuy = 2 - (int)fmo;
++    *codedW = (wm + 1) * 16;
++    *codedH = (2 - (int)fmo) * (hm + 1) * 16;
++    *w = *codedW - cux * (int)(cl + cr);
++    *h = *codedH - cuy * (int)(ct + cb);
++    return *w > 0 && *h > 0;
++}
++}  // namespace
++
++// ---------------------------------------------------------------------------
++
++SoftHulkAVC::SoftHulkAVC(
++        const char *name,
++        const OMX_CALLBACKTYPE *callbacks,
++        OMX_PTR appData,
++        OMX_COMPONENTTYPE **component)
++    : SoftVideoDecoderOMXComponent(
++            name, componentName, codingType,
++            kProfileLevels, ARRAY_SIZE(kProfileLevels),
++            320 /* width */, 240 /* height */, callbacks,
++            appData, component),
++      mH(NULL), mDecInit(false), mDecW(0), mDecH(0), mCodedW(0), mCodedH(0),
++      mBsAlloc(false), mFbSize(0),
++      mSpsW(0), mSpsH(0), mSpsCodedW(0), mSpsCodedH(0), mLastTs(0),
++      mReceivedEOS(false), mEosFlushed(false), mSignalledError(false),
++      mNeedReinit(false), mNewW(0), mNewH(0), mFramesOut(0), mDecodeErrors(0),
++      mWExit(false), mGen(0), mDumpFile(NULL), mDumpLeft(0) {
++    memset(&mBs, 0, sizeof(mBs));
++    memset(&mJob, 0, sizeof(mJob));
++    initPorts(
++            1 /* numMinInputBuffers */, kNumBuffers, 1024 * 1024,
++            1 /* numMinOutputBuffers */, kNumBuffers, MEDIA_MIMETYPE_VIDEO_AVC);
++    {
++        // debug aid: debug.hulk.dump=<nframes> dumps the first frames as I420
++        char v[PROPERTY_VALUE_MAX];
++        property_get("debug.hulk.dump", v, "0");
++        mDumpLeft = atoi(v);
++        if (mDumpLeft > 0) mDumpFile = fopen("/data/local/tmp/hulkdump.yuv", "wb");
++        if (!mDumpFile) mDumpLeft = 0;
++    }
++    mWorker = std::thread(&SoftHulkAVC::workerLoop, this);
++}
++
++SoftHulkAVC::~SoftHulkAVC() {
++    {
++        std::unique_lock<std::mutex> l(mWMutex);
++        mWCv.wait(l, [&] { return !mJob.valid; });
++        mWExit = true;
++        mWCv.notify_all();
++    }
++    mWorker.join();
++    destroyDecoder();
++    freePool();
++    if (mDumpFile) fclose(mDumpFile);
++    if (mBsAlloc) {
++        gDrv.free(&mBs, sizeof(mBs));
++        mBsAlloc = false;
++    }
++}
++
++OMX_ERRORTYPE SoftHulkAVC::sendCommand(OMX_COMMANDTYPE cmd, OMX_U32 param, OMX_PTR data) {
++    // Any frame still being converted when a command arrives is stale.
++    mGen++;
++    return SoftVideoDecoderOMXComponent::sendCommand(cmd, param, data);
++}
++
++int SoftHulkAVC::getColorAspectPreference() {
++    return kPreferContainer;
++}
++
++int SoftHulkAVC::findFb(const void *p) {
++    for (size_t i = 0; i < mFbs.size(); i++) {
++        if (&mFbs[i]->fb == p) return (int)i;
++    }
++    return -1;
++}
++
++// ---------------------------------------------------------------------------
++// worker thread: block format -> I420 into the OMX output buffer
++// ---------------------------------------------------------------------------
++void SoftHulkAVC::workerLoop() {
++    std::unique_lock<std::mutex> l(mWMutex);
++    for (;;) {
++        mWCv.wait(l, [&] { return mWExit || mJob.valid; });
++        if (!mJob.valid) {
++            if (mWExit) break;
++            continue;
++        }
++        Job j = mJob;
++        l.unlock();
++
++        OMX_BUFFERHEADERTYPE *hdr = j.hdr;
++        if (j.gen == mGen.load()) {
++            uint8_t *dst = hdr->pBuffer + hdr->nOffset;
++            size_t sizeY = (size_t)j.outW * j.outH;
++            hulkDetileI420((const uint8_t *)mFbs[j.idx]->mem.alignVa, j.stride, j.sliceH, j.w, j.h,
++                           dst, j.outW, dst + sizeY, dst + sizeY + sizeY / 4, j.outW / 2);
++        } else {
++            hdr->nFilledLen = 0;
++            hdr->nTimeStamp = 0;
++        }
++        {
++            std::lock_guard<std::mutex> fl(mFbLock);
++            FbEntry *e = mFbs[j.idx];
++            e->pending = false;
++            if (e->released) mFree.push_back(j.idx);
++        }
++        if (mDumpFile && mDumpLeft > 0 && j.gen == mGen.load()) {
++            uint8_t *dst = hdr->pBuffer + hdr->nOffset;
++            size_t sizeY = (size_t)j.outW * j.outH;
++            for (int y = 0; y < j.h; y++) fwrite(dst + (size_t)y * j.outW, 1, j.w, mDumpFile);
++            for (int p = 0; p < 2; p++)
++                for (int y = 0; y < j.h / 2; y++)
++                    fwrite(dst + sizeY + p * (sizeY / 4) + (size_t)y * (j.outW / 2), 1, j.w / 2, mDumpFile);
++            if (--mDumpLeft == 0) { fclose(mDumpFile); mDumpFile = NULL; }
++        }
++        notifyFillBufferDone(hdr);
++
++        l.lock();
++        mJob.valid = false;
++        mWCv.notify_all();
++    }
++}
++
++void SoftHulkAVC::waitWorkerIdle() {
++    std::unique_lock<std::mutex> l(mWMutex);
++    mWCv.wait(l, [&] { return !mJob.valid; });
++}
++
++// ---------------------------------------------------------------------------
++// driver management
++// ---------------------------------------------------------------------------
++bool SoftHulkAVC::allocPool(uint32_t size, int count) {
++    if (!mFbs.empty() && mFbSize >= size && (int)mFbs.size() >= count) return true;
++    freePool();
++    for (int i = 0; i < count; i++) {
++        FbEntry *e = new FbEntry;
++        memset(e, 0, sizeof(*e));
++        e->mem.type = kMemType;
++        e->mem.size = size;
++        e->mem.align = 512;
++        if (gDrv.alloc(&e->mem, sizeof(ValMem)) != 0) {
++            ALOGE("eVideoMemAlloc(%u) failed", size);
++            delete e;
++            freePool();
++            return false;
++        }
++        e->allocated = true;
++        e->fb.w[0] = (uint32_t)e->mem.alignVa;
++        e->fb.w[1] = e->mem.alignMva;
++        e->fb.w[2] = size;
++        mFbs.push_back(e);
++    }
++    mFbSize = size;
++    return true;
++}
++
++void SoftHulkAVC::freePool() {
++    for (FbEntry *e : mFbs) {
++        if (e->allocated) gDrv.free(&e->mem, sizeof(ValMem));
++        delete e;
++    }
++    mFbs.clear();
++    mFree.clear();
++    mFbSize = 0;
++}
++
++bool SoftHulkAVC::createDecoder(const uint8_t *au, size_t len) {
++    if (!loadDriver()) return false;
++    if (!mBsAlloc) {
++        memset(&mBs, 0, sizeof(mBs));
++        mBs.type = kMemType; mBs.size = kBsSize; mBs.align = 512;
++        if (gDrv.alloc(&mBs, sizeof(ValMem)) != 0) {
++            ALOGE("bitstream alloc failed");
++            return false;
++        }
++        mBsAlloc = true;
++    }
++    if (len > kBsSize) return false;
++
++    int alignW = (mCodedW + 15) & ~15, alignH = (mCodedH + 31) & ~31;
++    uint32_t fbSize = alignW * alignH * 3 / 2 + 4096;
++
++    if (gDrv.create(&mH, 0x100) != 0 || !mH) {
++        ALOGE("eVDecDrvCreate failed");
++        mH = NULL;
++        return false;
++    }
++    uint32_t sz = (uint32_t)mDecW | ((uint32_t)mDecH << 16);
++    gDrv.set(mH, 19, &sz, NULL);
++
++    memcpy(mBs.alignVa, au, len);
++    gDrv.flush(&mBs, sizeof(ValMem), 1);
++    Bs bs = { (uint32_t)mBs.alignVa, mBs.alignMva, (uint32_t)len, (uint32_t)mBs.alignVa,
++              (uint32_t)mBs.alignVa + (uint32_t)len, 0, (uint32_t)mBs.alignVa, 0 };
++    uint32_t out[16];
++    memset(out, 0, sizeof(out));
++    int r = gDrv.init(mH, &bs, out);
++    if (r != 0) {
++        ALOGE("eVDecDrvInit failed %d", r);
++        gDrv.release(mH);
++        mH = NULL;
++        return false;
++    }
++    uint32_t ca[3] = { 2, 16, 8 };
++    gDrv.set(mH, 17, ca, NULL);
++    uint32_t cb[2] = { 16, 8 };
++    gDrv.set(mH, 18, cb, NULL);
++
++    uint32_t dpb = 0;
++    gDrv.get(mH, 22, NULL, &dpb);
++    int count = (int)dpb + 7;
++    if (count < 10) count = 10;
++    if (count > kMaxFbs) count = kMaxFbs;
++    ALOGI("decoder created %dx%d (coded %dx%d) dpb=%u fbs=%d x %u", mDecW, mDecH, mCodedW, mCodedH,
++          dpb, count, fbSize);
++    if (!allocPool(fbSize, count)) {
++        gDrv.deinit(mH);
++        gDrv.release(mH);
++        mH = NULL;
++        return false;
++    }
++    {
++        std::lock_guard<std::mutex> fl(mFbLock);
++        mFree.clear();
++        for (size_t i = 0; i < mFbs.size(); i++) {
++            memset(&mFbs[i]->fb.w[3], 0, sizeof(mFbs[i]->fb.w) - 3 * sizeof(uint32_t));
++            mFbs[i]->pending = mFbs[i]->released = false;
++            mFree.push_back((int)i);
++        }
++    }
++    mDecInit = true;
++    return true;
++}
++
++void SoftHulkAVC::destroyDecoder() {
++    if (mH) {
++        gDrv.deinit(mH);
++        gDrv.release(mH);
++        mH = NULL;
++    }
++    mDecInit = false;
++}
++
++void SoftHulkAVC::resetState() {
++    waitWorkerIdle();
++    destroyDecoder();
++    mPending.clear();
++    mTs.clear();
++    mNeedReinit = false;
++    mReceivedEOS = false;
++    mEosFlushed = false;
++    std::lock_guard<std::mutex> fl(mFbLock);
++    mFree.clear();
++    for (size_t i = 0; i < mFbs.size(); i++) {
++        mFbs[i]->pending = mFbs[i]->released = false;
++        mFree.push_back((int)i);
++    }
++}
++
++void SoftHulkAVC::drain() {
++    for (;;) {
++        Fb *d = NULL;
++        gDrv.get(mH, 2, NULL, &d);
++        if (!d) break;
++        int idx = findFb(d);
++        if (idx < 0) {
++            ALOGW("driver displayed unknown fb %p", d);
++            continue;
++        }
++        uint32_t pi[9];
++        memset(pi, 0, sizeof(pi));
++        gDrv.get(mH, 4, NULL, pi);
++        int64_t ts = mLastTs;
++        if (!mTs.empty()) {
++            ts = *mTs.begin();
++            mTs.erase(mTs.begin());
++        }
++        mLastTs = ts;
++        gDrv.inval(&mFbs[idx]->mem, sizeof(ValMem), 1);
++        {
++            std::lock_guard<std::mutex> fl(mFbLock);
++            mFbs[idx]->pending = true;
++        }
++        PendingFrame pf;
++        pf.idx = idx; pf.ts = ts; pf.w = mDecW; pf.h = mDecH;
++        pf.stride = pi[2] ? (int)pi[2] : ((mCodedW + 15) & ~15);
++        pf.sliceH = pi[3] ? (int)pi[3] : ((mCodedH + 31) & ~31);
++        mPending.push_back(pf);
++    }
++    for (;;) {
++        Fb *f = NULL;
++        gDrv.get(mH, 3, NULL, &f);
++        if (!f) break;
++        int idx = findFb(f);
++        if (idx < 0) continue;
++        std::lock_guard<std::mutex> fl(mFbLock);
++        mFbs[idx]->released = true;
++        if (!mFbs[idx]->pending) mFree.push_back(idx);
++    }
++}
++
++bool SoftHulkAVC::decodeAu(const uint8_t *au, size_t len) {
++    if (len > kBsSize) {
++        ALOGE("access unit too large: %zu", len);
++        return false;
++    }
++    int idx = -1;
++    {
++        std::lock_guard<std::mutex> fl(mFbLock);
++        if (!mFree.empty()) { idx = mFree.back(); mFree.pop_back(); }
++    }
++    if (idx < 0) {
++        waitWorkerIdle();
++        std::lock_guard<std::mutex> fl(mFbLock);
++        if (!mFree.empty()) { idx = mFree.back(); mFree.pop_back(); }
++    }
++    if (idx >= 0) mFbs[idx]->released = false;
++
++    memcpy(mBs.alignVa, au, len);
++    gDrv.flush(&mBs, sizeof(ValMem), 1);
++    Bs bs = { (uint32_t)mBs.alignVa, mBs.alignMva, (uint32_t)len, (uint32_t)mBs.alignVa,
++              (uint32_t)mBs.alignVa + (uint32_t)len, 0, (uint32_t)mBs.alignVa, 0 };
++    int rc = gDrv.decode(mH, &bs, idx >= 0 ? &mFbs[idx]->fb : NULL);
++    if (rc != 0) {
++        if ((mDecodeErrors++ & 63) == 0) ALOGW("decode returned %d (count %u)", rc, mDecodeErrors);
++    }
++    drain();
++    return rc == 0;
++}
++
++void SoftHulkAVC::flushDriver() {
++    if (!mH || !mDecInit) return;
++    gDrv.decode(mH, NULL, NULL);
++    for (int k = 0; k < 4; k++) drain();
++}
++
++// ---------------------------------------------------------------------------
++// bitstream helpers
++// ---------------------------------------------------------------------------
++SoftHulkAVC::NalScan SoftHulkAVC::scanNals(const uint8_t *d, size_t n) {
++    NalScan s;
++    size_t i = 0;
++    // find start codes
++    std::vector<size_t> starts;  // offset of first byte after 00 00 01
++    for (i = 0; i + 3 <= n; i++) {
++        if (d[i] == 0 && d[i + 1] == 0 && d[i + 2] == 1) {
++            starts.push_back(i + 3);
++            i += 2;
++        }
++    }
++    for (size_t k = 0; k < starts.size(); k++) {
++        size_t b = starts[k];
++        size_t e = (k + 1 < starts.size()) ? starts[k + 1] - 3 : n;
++        while (e > b && d[e - 1] == 0) e--;  // trailing zeros / 4-byte start code
++        if (e <= b) continue;
++        int t = d[b] & 0x1f;
++        size_t scb = b - 3;
++        if (scb > 0 && d[scb - 1] == 0) scb--;
++        if (t == 7) {
++            s.hasSps = true;
++            mSps.assign(d + scb, d + e);
++            int w, h, cw, ch;
++            if (parseSps(d + b, e - b, &w, &h, &cw, &ch)) {
++                s.spsOk = true; s.w = w; s.h = h; s.codedW = cw; s.codedH = ch;
++                mSpsW = w; mSpsH = h; mSpsCodedW = cw; mSpsCodedH = ch;
++            }
++        } else if (t == 8) {
++            s.hasPps = true;
++            mPps.assign(d + scb, d + e);
++        } else if (t == 1 || t == 5) {
++            s.hasSlice = true;
++            if (t == 5) s.hasIdr = true;
++        }
++    }
++    return s;
++}
++
++// ---------------------------------------------------------------------------
++// OMX plumbing
++// ---------------------------------------------------------------------------
++void SoftHulkAVC::onReset() {
++    SoftVideoDecoderOMXComponent::onReset();
++    mSignalledError = false;
++    resetState();
++}
++
++void SoftHulkAVC::onPortFlushCompleted(OMX_U32 portIndex) {
++    (void)portIndex;
++    resetState();
++}
++
++SoftHulkAVC::Result SoftHulkAVC::processInput(OMX_BUFFERHEADERTYPE *hdr) {
++    const uint8_t *data = hdr->pBuffer + hdr->nOffset;
++    size_t len = hdr->nFilledLen;
++    bool eos = hdr->nFlags & OMX_BUFFERFLAG_EOS;
++    bool config = hdr->nFlags & OMX_BUFFERFLAG_CODECCONFIG;
++    if (eos) mReceivedEOS = true;
++    ALOGV("input len=%zu flags=0x%x ts=%lld pending=%zu", len, hdr->nFlags, (long long)hdr->nTimeStamp, mPending.size());
++    if (eos) ALOGI("EOS input len=%zu out=%u", len, mFramesOut);
++
++    NalScan s;
++    if (len > 0) s = scanNals(data, len);
++
++    // Resolution handling
++    if (s.spsOk) {
++        if (mDecInit && (s.w != mDecW || s.h != mDecH)) {
++            ALOGI("resolution change %dx%d -> %dx%d", mDecW, mDecH, s.w, s.h);
++            flushDriver();
++            mNewW = s.w; mNewH = s.h;
++            mNeedReinit = true;
++            return kKeep;
++        }
++        if (!mDecInit && ((uint32_t)s.w != mWidth || (uint32_t)s.h != mHeight)) {
++            bool reset = false;
++            handlePortSettingsChange(&reset, s.w, s.h);
++            if (reset) return config ? kStopConsumed : kStop;
++        }
++    }
++
++    if (config || !s.hasSlice) {
++        if (eos) {
++            flushDriver();
++            mEosFlushed = true;
++        }
++        return kConsume;
++    }
++
++    // picture data
++    const uint8_t *au = data;
++    size_t auLen = len;
++    if (!mDecInit) {
++        if (!s.hasIdr) return kConsume;  // wait for a random access point
++        if (mSps.empty() || mPps.empty() || mSpsW == 0) {
++            ALOGW("no SPS/PPS yet, dropping AU");
++            return kConsume;
++        }
++        mAuBuf.clear();
++        if (!s.hasSps) mAuBuf.insert(mAuBuf.end(), mSps.begin(), mSps.end());
++        if (!s.hasPps) mAuBuf.insert(mAuBuf.end(), mPps.begin(), mPps.end());
++        mAuBuf.insert(mAuBuf.end(), data, data + len);
++        au = mAuBuf.data();
++        auLen = mAuBuf.size();
++
++        mDecW = s.spsOk ? s.w : mSpsW;
++        mDecH = s.spsOk ? s.h : mSpsH;
++        mCodedW = s.spsOk ? s.codedW : mSpsCodedW;
++        mCodedH = s.spsOk ? s.codedH : mSpsCodedH;
++        if (((uint32_t)mDecW != mWidth || (uint32_t)mDecH != mHeight)) {
++            bool reset = false;
++            handlePortSettingsChange(&reset, mDecW, mDecH);
++            if (reset) return kStop;
++        }
++        if (!createDecoder(au, auLen)) {
++            notify(OMX_EventError, OMX_ErrorUnsupportedSetting, 0, NULL);
++            mSignalledError = true;
++            return kStop;
++        }
++    }
++
++    mTs.insert(hdr->nTimeStamp);
++    if (!decodeAu(au, auLen)) {
++        // the driver rejected the unit; forget its timestamp
++        auto it = mTs.find(hdr->nTimeStamp);
++        if (it != mTs.end()) mTs.erase(it);
++    }
++    if (eos) {
++        flushDriver();
++        mEosFlushed = true;
++    }
++    return kConsume;
++}
++
++bool SoftHulkAVC::deliverFrame(List<BufferInfo *> &outQ) {
++    PendingFrame pf = mPending.front();
++    BufferInfo *outInfo = *outQ.begin();
++    OMX_BUFFERHEADERTYPE *hdr = outInfo->mHeader;
++    uint32_t outW = outputBufferWidth(), outH = outputBufferHeight();
++
++    mPending.pop_front();
++    outQ.erase(outQ.begin());
++    outInfo->mOwnedByUs = false;
++
++    hdr->nOffset = 0;
++    hdr->nFlags = 0;
++    hdr->nTimeStamp = pf.ts;
++    if ((uint32_t)pf.w > outW || (uint32_t)pf.h > outH ||
++            hdr->nAllocLen < outW * outH * 3 / 2) {
++        ALOGE("output buffer too small / frame too big: %dx%d vs %ux%u alloc %u", pf.w, pf.h,
++              outW, outH, hdr->nAllocLen);
++        hdr->nFilledLen = 0;
++        std::lock_guard<std::mutex> fl(mFbLock);
++        mFbs[pf.idx]->pending = false;
++        if (mFbs[pf.idx]->released) mFree.push_back(pf.idx);
++        notifyFillBufferDone(hdr);
++        return false;
++    }
++    hdr->nFilledLen = outW * outH * 3 / 2;
++
++    if (mUpdateColorAspects) {
++        notify(OMX_EventPortSettingsChanged, kOutputPortIndex, kDescribeColorAspectsIndex, NULL);
++        mUpdateColorAspects = false;
++    }
++
++    waitWorkerIdle();
++    {
++        std::lock_guard<std::mutex> l(mWMutex);
++        mJob.valid = true;
++        mJob.idx = pf.idx; mJob.hdr = hdr;
++        mJob.w = pf.w; mJob.h = pf.h; mJob.stride = pf.stride; mJob.sliceH = pf.sliceH;
++        mJob.outW = outW; mJob.outH = outH;
++        mJob.gen = mGen.load();
++        mWCv.notify_all();
++    }
++    mFramesOut++;
++    return true;
++}
++
++void SoftHulkAVC::onQueueFilled(OMX_U32 portIndex) {
++    (void)portIndex;
++    if (mSignalledError || mOutputPortSettingsChange != NONE) return;
++
++    List<BufferInfo *> &inQ = getPortQueue(kInputPortIndex);
++    List<BufferInfo *> &outQ = getPortQueue(kOutputPortIndex);
++
++    for (;;) {
++        while (!mPending.empty() && !outQ.empty()) deliverFrame(outQ);
++        if (!mPending.empty()) return;
++
++        if (mEosFlushed) {
++            if (outQ.empty()) return;
++            waitWorkerIdle();
++            BufferInfo *outInfo = *outQ.begin();
++            OMX_BUFFERHEADERTYPE *hdr = outInfo->mHeader;
++            ALOGI("sending EOS, frames out %u", mFramesOut);
++            hdr->nFilledLen = 0;
++            hdr->nOffset = 0;
++            hdr->nTimeStamp = 0;
++            hdr->nFlags = OMX_BUFFERFLAG_EOS;
++            outQ.erase(outQ.begin());
++            outInfo->mOwnedByUs = false;
++            notifyFillBufferDone(hdr);
++            mEosFlushed = false;
++            mReceivedEOS = false;
++            return;
++        }
++
++        if (mNeedReinit) {
++            waitWorkerIdle();
++            destroyDecoder();
++            mTs.clear();
++            mNeedReinit = false;
++            bool reset = false;
++            handlePortSettingsChange(&reset, mNewW, mNewH);
++            if (reset) return;
++        }
++
++        if (inQ.empty() || outQ.empty()) return;
++
++        BufferInfo *inInfo = *inQ.begin();
++        OMX_BUFFERHEADERTYPE *hdr = inInfo->mHeader;
++        if (hdr == NULL) {
++            inQ.erase(inQ.begin());
++            inInfo->mOwnedByUs = false;
++            continue;
++        }
++
++        Result r = processInput(hdr);
++        if (r == kKeep) continue;
++        if (r == kStop) return;
++        inQ.erase(inQ.begin());
++        inInfo->mOwnedByUs = false;
++        notifyEmptyBufferDone(hdr);
++        if (r == kStopConsumed) return;
++        if (mSignalledError) return;
++    }
++}
++
++}  // namespace android
++
++android::SoftOMXComponent *createSoftOMXComponent(
++        const char *name, const OMX_CALLBACKTYPE *callbacks, OMX_PTR appData,
++        OMX_COMPONENTTYPE **component) {
++    return new android::SoftHulkAVC(name, callbacks, appData, component);
++}
+diff --git a/media/libstagefright/codecs/hulkavcdec/SoftHulkAVCDec.h b/media/libstagefright/codecs/hulkavcdec/SoftHulkAVCDec.h
+new file mode 100644
+index 0000000..f0f36ac
+--- /dev/null
++++ b/media/libstagefright/codecs/hulkavcdec/SoftHulkAVCDec.h
+@@ -0,0 +1,136 @@
++/*
++ * H.264 decoder OMX component backed by the MediaTek MT6592 hardware decoder
++ * (libvcodecdrv.so), loaded at runtime.
++ */
++#ifndef SOFT_HULK_AVC_DEC_H_
++#define SOFT_HULK_AVC_DEC_H_
++
++#include <media/stagefright/omx/SoftVideoDecoderOMXComponent.h>
++
++#include <stdio.h>
++#include <atomic>
++#include <condition_variable>
++#include <deque>
++#include <mutex>
++#include <set>
++#include <thread>
++#include <vector>
++
++namespace android {
++
++struct SoftHulkAVC : public SoftVideoDecoderOMXComponent {
++    SoftHulkAVC(const char *name, const OMX_CALLBACKTYPE *callbacks,
++                OMX_PTR appData, OMX_COMPONENTTYPE **component);
++
++protected:
++    virtual ~SoftHulkAVC();
++
++    virtual void onQueueFilled(OMX_U32 portIndex);
++    virtual void onPortFlushCompleted(OMX_U32 portIndex);
++    virtual void onReset();
++    virtual int getColorAspectPreference();
++
++private:
++    enum { kNumBuffers = 8 };
++
++    // ---- driver-visible structures (see vdectest for the protocol) ----
++    struct ValMem {
++        uint32_t type, size;
++        void *va;
++        uint32_t mva, align;
++        void *alignVa;
++        uint32_t alignMva, codec, r32, r36;
++        void *m4u;
++        uint32_t r44;
++    };
++    struct Bs { uint32_t va, mva, size, rd, wr, r20, orgva, r28; };
++    struct Fb { uint32_t w[32]; };
++
++    struct FbEntry {
++        Fb fb;
++        ValMem mem;
++        bool allocated;
++        bool pending;   // displayed by driver, not yet converted
++        bool released;  // driver no longer references it
++    };
++
++    struct PendingFrame {
++        int idx;
++        int64_t ts;
++        int w, h, stride, sliceH;
++    };
++
++    struct Job {
++        bool valid;
++        int idx;
++        OMX_BUFFERHEADERTYPE *hdr;
++        int w, h, stride, sliceH;
++        int outW, outH;
++        uint32_t gen;
++    };
++
++    enum Result { kConsume, kKeep, kStop, kStopConsumed };
++
++    struct NalScan {
++        bool hasSlice = false, hasIdr = false, hasSps = false, hasPps = false;
++        bool spsOk = false;
++        int w = 0, h = 0, codedW = 0, codedH = 0;
++    };
++
++    // driver handle
++    void *mH;
++    bool mDecInit;
++    int mDecW, mDecH, mCodedW, mCodedH;
++    ValMem mBs;
++    bool mBsAlloc;
++    std::vector<FbEntry *> mFbs;
++    uint32_t mFbSize;
++    std::vector<int> mFree;
++    std::mutex mFbLock;
++
++    std::vector<uint8_t> mSps, mPps;
++    int mSpsW, mSpsH, mSpsCodedW, mSpsCodedH;
++    std::multiset<int64_t> mTs;
++    int64_t mLastTs;
++    std::deque<PendingFrame> mPending;
++    std::vector<uint8_t> mAuBuf;
++
++    bool mReceivedEOS, mEosFlushed, mSignalledError;
++    bool mNeedReinit;
++    int mNewW, mNewH;
++    unsigned mFramesOut, mDecodeErrors;
++
++    // detile worker
++    std::thread mWorker;
++    std::mutex mWMutex;
++    std::condition_variable mWCv;
++    Job mJob;
++    bool mWExit;
++    std::atomic<uint32_t> mGen;
++    FILE *mDumpFile;
++    int mDumpLeft;
++
++    OMX_ERRORTYPE sendCommand(OMX_COMMANDTYPE cmd, OMX_U32 param, OMX_PTR data);
++
++    bool loadDriver();
++    NalScan scanNals(const uint8_t *d, size_t n);
++    bool createDecoder(const uint8_t *au, size_t len);
++    void destroyDecoder();
++    bool allocPool(uint32_t size, int count);
++    void freePool();
++    bool decodeAu(const uint8_t *au, size_t len);
++    void flushDriver();
++    void drain();
++    void resetState();
++    Result processInput(OMX_BUFFERHEADERTYPE *hdr);
++    bool deliverFrame(List<BufferInfo *> &outQ);
++    void waitWorkerIdle();
++    void workerLoop();
++    int findFb(const void *p);
++
++    DISALLOW_EVIL_CONSTRUCTORS(SoftHulkAVC);
++};
++
++}  // namespace android
++
++#endif  // SOFT_HULK_AVC_DEC_H_
+diff --git a/media/libstagefright/codecs/hulkavcdec/exports.lds b/media/libstagefright/codecs/hulkavcdec/exports.lds
+new file mode 100644
+index 0000000..e24f3fa
+--- /dev/null
++++ b/media/libstagefright/codecs/hulkavcdec/exports.lds
+@@ -0,0 +1,5 @@
++{
++    global:
++        _Z22createSoftOMXComponentPKcPK16OMX_CALLBACKTYPEPvPP17OMX_COMPONENTTYPE;
++    local: *;
++};
+diff --git a/media/libstagefright/omx/SoftOMXPlugin.cpp b/media/libstagefright/omx/SoftOMXPlugin.cpp
+index 1f3e8c1..b4d58cf 100644
+--- a/media/libstagefright/omx/SoftOMXPlugin.cpp
++++ b/media/libstagefright/omx/SoftOMXPlugin.cpp
+@@ -45,6 +45,7 @@ static const struct {
+     { "OMX.google.amrnb.encoder", "amrnbenc", "audio_encoder.amrnb" },
+     { "OMX.google.amrwb.decoder", "amrdec", "audio_decoder.amrwb" },
+     { "OMX.google.amrwb.encoder", "amrwbenc", "audio_encoder.amrwb" },
++    { "OMX.hulk.h264.decoder", "hulkavcdec", "video_decoder.avc" },
+     { "OMX.google.h264.decoder", "avcdec", "video_decoder.avc" },
+     { "OMX.google.h264.encoder", "avcenc", "video_encoder.avc" },
+     { "OMX.google.hevc.decoder", "hevcdec", "video_decoder.hevc" },
+diff --git a/media/libstagefright/omx/include/media/stagefright/omx/SimpleSoftOMXComponent.h b/media/libstagefright/omx/include/media/stagefright/omx/SimpleSoftOMXComponent.h
+index 1d1f2bd..df6c8fc 100644
+--- a/media/libstagefright/omx/include/media/stagefright/omx/SimpleSoftOMXComponent.h
++++ b/media/libstagefright/omx/include/media/stagefright/omx/SimpleSoftOMXComponent.h
+@@ -85,6 +85,9 @@ protected:
+ 
+     PortInfo *editPortInfo(OMX_U32 portIndex);
+ 
++    virtual OMX_ERRORTYPE sendCommand(
++            OMX_COMMANDTYPE cmd, OMX_U32 param, OMX_PTR data);
++
+ private:
+     enum {
+         kWhatSendCommand,
+@@ -105,9 +108,6 @@ private:
+     bool isSetParameterAllowed(
+             OMX_INDEXTYPE index, const OMX_PTR params) const;
+ 
+-    virtual OMX_ERRORTYPE sendCommand(
+-            OMX_COMMANDTYPE cmd, OMX_U32 param, OMX_PTR data);
+-
+     virtual OMX_ERRORTYPE getParameter(
+             OMX_INDEXTYPE index, OMX_PTR params);
+ 
+-- 
+2.56.0
+

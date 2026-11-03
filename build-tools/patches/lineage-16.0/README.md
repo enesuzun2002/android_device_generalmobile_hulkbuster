@@ -70,6 +70,19 @@ frameworks-av/0001-cameraservice-cache-hal1-legacy-parameters-at-startu.patch
     parameters, so the first app open does not race the shim's own open
     and get evicted.
 
+frameworks-av/0002-stagefright-add-OMX.hulk.h264.decoder-for-MT6592-har.patch
+frameworks-av/0003-stagefright-use-software-renderer-path-and-finish-OM.patch
+frameworks-av/0004-stagefright-advertise-up-to-level-4.2-on-OMX.hulk.h2.patch
+    OMX.hulk.h264.decoder: our own OMX component (codecs/hulkavcdec) that
+    drives the MT6592 VDEC hardware through libvcodecdrv.so directly. MTK's
+    libMtkOmxVdec is unusable on Pie: its bundled libClearMotionFW (MJC)
+    was built for a different decoder layout and corrupts it. Output is
+    de-tiled (MTK block format -> I420) with NEON and rendered like the
+    Google decoders, so OMX.hulk. joins OMX.google. in ACodec/MediaCodec's
+    software-renderer checks. Advertises up to 1080p60, High@4.2, which
+    YouTube needs to pick it. Device side: configs/media_codecs.xml,
+    seccomp/mediacodec.policy, PRODUCT_PACKAGES in device.mk.
+
 hardware-interfaces/0001-camera-device-support-pre-O-HAL1-clients.patch
     MediaTek's N-era HAL1 calls get_memory with a NULL cookie and takes
     references on preview buffers as ANativeWindowBuffers; handle both.
