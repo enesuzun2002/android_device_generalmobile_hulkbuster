@@ -659,11 +659,11 @@ on property:sys.perf.profile=2
 on boot
     # interactive governor (kernel default): tunables for 8x Cortex-A7 UI
     write /sys/devices/system/cpu/cpufreq/interactive/timer_rate 20000
-    write /sys/devices/system/cpu/cpufreq/interactive/min_sample_time 60000
-    write /sys/devices/system/cpu/cpufreq/interactive/hispeed_freq 1248000
-    write /sys/devices/system/cpu/cpufreq/interactive/go_hispeed_load 85
-    write /sys/devices/system/cpu/cpufreq/interactive/above_hispeed_delay "20000 1495000:60000"
-    write /sys/devices/system/cpu/cpufreq/interactive/target_loads "65 845000:75 1144000:85 1365000:90"
+    write /sys/devices/system/cpu/cpufreq/interactive/min_sample_time 40000
+    write /sys/devices/system/cpu/cpufreq/interactive/hispeed_freq 1495000
+    write /sys/devices/system/cpu/cpufreq/interactive/go_hispeed_load 75
+    write /sys/devices/system/cpu/cpufreq/interactive/above_hispeed_delay "20000 1664000:40000"
+    write /sys/devices/system/cpu/cpufreq/interactive/target_loads "70 1144000:80 1495000:90"
     write /sys/devices/system/cpu/cpufreq/interactive/boostpulse_duration 200000
     write /sys/devices/system/cpu/cpufreq/interactive/io_is_busy 1
     # the power HAL (user system) owns hotplug and boost
