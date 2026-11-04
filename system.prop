@@ -75,3 +75,9 @@ ro.radio.noril=yes
 # flash) get fully compiled later while idle and charging.
 pm.dexopt.install=speed
 pm.dexopt.bg-dexopt=speed
+
+# SurfaceFlinger: latch app buffers before their GPU fence signals (one frame
+# less latency). Settings scroll jank fell from ~1-9% to 0-0.2% per round,
+# 99th percentile 16-23 ms -> 9-11 ms. Drop this if black or half-drawn
+# frames show up.
+debug.sf.latch_unsignaled=1
