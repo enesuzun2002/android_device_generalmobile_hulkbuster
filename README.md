@@ -34,6 +34,8 @@ Working (validated on device):
   * Hardware H.264 decoding up to 1080p60 (OMX.hulk.h264.decoder)
   * Hardware H.264 encoding up to 1920x1088 (OMX.hulk.h264.encoder): camera
     video, screenrecord (falls back to 720p for 1920x1200), MediaCodec apps
+  * Capacitive Home/Back/App switch keys with backlight; key actions and
+    backlight timeout in Settings > System > Buttons
   * Sensors, charging, lights, thermal, power HAL
 
 Known issues:
@@ -44,9 +46,6 @@ Known issues:
   * Camera video runs at about 25 fps, and 1080p is upscaled from the
     sensor's 1280x960 mode.
   * Only H.264 has a hardware codec; VP9/HEVC decode in software.
-  * The advertised refresh rate can stay at LK's 55.71 Hz when the
-    kernel's post-boot measurement misses; the panel itself still runs at
-    59.95 Hz (dumpsys SurfaceFlinger --dispsync shows the real period).
   * Small flicker at the bottom of the timezone dropdown; closing recents
     can stutter.
   * On the first boot after a reset, the "Allow USB debugging" dialog may
