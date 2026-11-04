@@ -1,0 +1,8 @@
+// MDP (DpBlitStream) block->YV12 conversion experiment into a gralloc buffer.
+cc_binary {
+    name: "mdptest",
+    srcs: ["mdptest.cpp"],
+    include_dirs: ["frameworks/av/media/libstagefright/codecs/hulkavcdec"],
+    shared_libs: ["liblog", "libui", "libutils", "libcutils"],
+    cflags: ["-Wall", "-Wno-unused-parameter"],
+}

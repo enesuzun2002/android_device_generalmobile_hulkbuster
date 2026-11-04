@@ -89,6 +89,16 @@ frameworks-av/0005-stagefright-pipeline-hulkavcdec-de-tile-queue-for-10.patch
     de-tiled output in 64-byte bursts, 16 output buffers. 1080p60 went from
     ~14 to ~60 fps; HW decode is ~14 ms per 1080p frame (ceiling ~68 fps).
 
+frameworks-av/0006-stagefright-convert-hulkavcdec-frames-into-gralloc-b.patch
+frameworks-av/0007-stagefright-render-OMX.hulk.-decoder-output-through-.patch
+    OMX.hulk.h264.decoder now takes native-window (YV12 gralloc) buffers and
+    converts the MTK block frames into them with the MDP (libdpframework
+    DpBlitStream, dest = the gralloc ION fd), instead of a CPU de-tile into
+    a ByteBuffer plus SoftwareRenderer copy; OMX.hulk. leaves ACodec/
+    MediaCodec's software-renderer checks. 1080p60: media.codec 48-66% ->
+    16-22%, mediaserver 45-53% -> 13-16%, 0 drops. The CPU de-tile path stays
+    for ByteBuffer users and as per-frame fallback.
+
 hardware-interfaces/0001-camera-device-support-pre-O-HAL1-clients.patch
     MediaTek's N-era HAL1 calls get_memory with a NULL cookie and takes
     references on preview buffers as ANativeWindowBuffers; handle both.
