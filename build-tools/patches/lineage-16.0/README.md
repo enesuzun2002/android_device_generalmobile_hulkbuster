@@ -121,21 +121,9 @@ packages-apps-Backgrounds/0001-Backgrounds-load-downscaled-previews-for-the-wall
     ~380 MB and half the frames took 250-950 ms (texture uploads to the
     Mali-450). Grid previews are now decoded downscaled: 81 MB, 2.4% janky.
 
-hardware-interfaces/0005-graphics-composer-hwc2on1adapter-own-the-client-targ.patch
-    hwcomposer.mt6592 never closes the framebuffer-target acquire fence, so
-    the composer leaked one fd per GPU-composited frame and crashed after
-    ~30k frames (UI restart). The adapter now waits for that fence itself.
-
 hardware-interfaces/0006-camera-device-hide-flash-modes-on-cameras-without-a-.patch
     The front camera got the rear camera's flash modes from a shared HAL1
     feature table; ro.vendor.camera1.no_flash=true limits it to "off".
-
-hardware-interfaces/0007-graphics-composer-hwc2on1adapter-fix-tearing-on-the-.patch
-    Tearing on dialogs/dim layers. The MTK retire fence signals before the
-    old framebuffer leaves scanout, so its FBT release fence is now merged in
-    (stale fences are dropped on power mode changes). The blob's overlay
-    reprogramming (UIComposeThread) times out when layers change, so those
-    frames and dim layers are GPU-composed for 30 frames, then overlays.
 
 frameworks-base/0002-SystemUI-allow-disabling-the-notification-launch-ani.patch
     persist.sys.notif_launch_anim=false (system.prop) replaces SystemUI's
@@ -146,3 +134,7 @@ frameworks-base/0003-SystemUI-grow-the-notification-launch-animation-from.patch
     The launch animation centred the expanding card horizontally, so on
     this tablet's left-side notification panel it jumped sideways first.
     It now grows from the notification's real position.
+
+Retired: hardware-interfaces 0005 and 0007 (HWC2On1Adapter fence/tearing
+fixes) now live in the device tree (hwc/: libhwc2on1adapter_hulkbuster and
+android.hardware.graphics.composer@2.1-impl-hulkbuster).

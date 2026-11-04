@@ -1,0 +1,90 @@
+// Composer HAL for the MTK HWC1 blob (hwcomposer.mt6592).
+//
+// A device copy of AOSP's HWC2On1Adapter (hardware/interfaces
+// graphics/composer/2.1/utils/hwc2on1adapter) with the fixes this blob needs:
+//  - own the framebuffer-target acquire fence (the blob leaked one fd per
+//    GPU-composited frame and crashed SurfaceFlinger after ~30k frames),
+//  - merge the FBT release fence into the retire fence and reset it on power
+//    mode changes (GPU tile-row tearing),
+//  - compose on the GPU for 30 frames after layer/geometry changes and while a
+//    dim layer is present (the blob's overlay reprogramming times out).
+// The composer passthrough is built against these headers (the AOSP header
+// library re-exports the stock adapter header, whose class layout differs) and
+// loaded in place of android.hardware.graphics.composer@2.1-impl.
+
+cc_library_static {
+    name: "libhwc2on1adapter_hulkbuster",
+    vendor: true,
+    srcs: [
+        "hwc2on1adapter/HWC2On1Adapter.cpp",
+        "hwc2on1adapter/MiniFence.cpp",
+    ],
+    export_include_dirs: ["hwc2on1adapter/include"],
+    shared_libs: [
+        "libutils",
+        "libcutils",
+        "liblog",
+        "libhardware",
+        "libsync",
+    ],
+    export_shared_lib_headers: ["libutils"],
+    // Same warning set as AOSP's libhwc2on1adapter.
+    cflags: [
+        "-Wall",
+        "-Werror",
+        "-Wno-user-defined-warnings",
+    ],
+    cppflags: [
+        "-Weverything",
+        "-Wunused",
+        "-Wunreachable-code",
+        "-Wno-exit-time-destructors",
+        "-Wno-global-constructors",
+        "-Wno-c++98-compat-pedantic",
+        "-Wno-nested-anon-types",
+        "-Wno-gnu-anonymous-struct",
+        "-Wno-padded",
+        "-Wno-covered-switch-default",
+        "-Wno-zero-length-array",
+        "-Wno-double-promotion",
+        "-Wno-sign-conversion",
+        "-Wno-switch-enum",
+        "-Wno-float-equal",
+        "-Wno-shorten-64-to-32",
+        "-Wno-sign-compare",
+        "-Wno-missing-prototypes",
+    ],
+}
+
+// HIDL's passthrough loader picks up any /vendor/lib/hw library named
+// android.hardware.graphics.composer@2.1-impl*.so, so this replaces the AOSP
+// impl as long as device.mk doesn't install that one too.
+cc_library_shared {
+    name: "android.hardware.graphics.composer@2.1-impl-hulkbuster",
+    defaults: ["hidl_defaults"],
+    vendor: true,
+    relative_install_path: "hw",
+    srcs: ["composer/passthrough.cpp"],
+    local_include_dirs: ["composer/include"],
+    header_libs: [
+        "android.hardware.graphics.composer@2.1-hal",
+    ],
+    static_libs: ["libhwc2on1adapter_hulkbuster"],
+    shared_libs: [
+        "android.hardware.graphics.composer@2.1",
+        "android.hardware.graphics.mapper@2.0",
+        "libbase",
+        "libcutils",
+        "libfmq",
+        "libhardware",
+        "libhidlbase",
+        "libhidltransport",
+        "liblog",
+        "libsync",
+        "libutils",
+        "libhwc2onfbadapter",
+    ],
+    cflags: [
+        "-DLOG_TAG=\"ComposerHal\"",
+    ],
+}

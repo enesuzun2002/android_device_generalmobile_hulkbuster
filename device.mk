@@ -38,14 +38,14 @@ PRODUCT_PACKAGES += android.hardware.sensors@1.0-service.hulkbuster
 # shipped with each -service package. See manifest.xml.
 
 # Graphics: gralloc.mt6592 / hwcomposer.mt6592 (HWC1) behind the HIDL HALs.
+# The composer passthrough + patched HWC2On1Adapter are built from hwc/.
 PRODUCT_PACKAGES += \
     android.hardware.graphics.allocator@2.0-impl \
     android.hardware.graphics.allocator@2.0-service \
     android.hardware.graphics.mapper@2.0-impl \
-    android.hardware.graphics.composer@2.1-impl \
+    android.hardware.graphics.composer@2.1-impl-hulkbuster \
     android.hardware.graphics.composer@2.1-service \
     android.hardware.configstore@1.0-service \
-    libhwc2on1adapter \
     libhwc2onfbadapter
 
 # Lights, power, health, thermal, memtrack: native services (lights/, power/,
