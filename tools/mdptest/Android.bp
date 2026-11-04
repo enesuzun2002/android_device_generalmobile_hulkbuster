@@ -2,7 +2,7 @@
 cc_binary {
     name: "mdptest",
     srcs: ["mdptest.cpp"],
-    include_dirs: ["frameworks/av/media/libstagefright/codecs/hulkavcdec"],
+    include_dirs: ["device/generalmobile/hulkbuster/media/hulkavcdec"],
     shared_libs: ["liblog", "libui", "libutils", "libcutils"],
     cflags: ["-Wall", "-Wno-unused-parameter"],
 }

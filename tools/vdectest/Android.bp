@@ -3,7 +3,7 @@
 cc_binary {
     name: "vdectest",
     srcs: ["vdectest.cpp"],
-    include_dirs: ["frameworks/av/media/libstagefright/codecs/hulkavcdec"],
+    include_dirs: ["device/generalmobile/hulkbuster/media/hulkavcdec"],
     shared_libs: ["liblog"],
     cflags: ["-Wall", "-Wno-unused-parameter"],
 }

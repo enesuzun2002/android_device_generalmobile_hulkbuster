@@ -1,0 +1,44 @@
+// OMX plugin for the MT6592 hardware H.264 decoder and encoder. OMXMaster in
+// the omx service loads libstagefrighthw.so from /system/lib (this replaces the
+// MediaTek blob of the same name, which only loaded the unusable libMtkOmx*
+// components). The decoder and encoder are SoftOMXComponent subclasses built
+// into this library; they use the MTK libvcodecdrv/libdpframework through
+// dlopen. Linked against the system libstagefright_omx, so it stays in /system.
+cc_library_shared {
+    name: "libstagefrighthw",
+
+    srcs: [
+        "omx/HulkOMXPlugin.cpp",
+        "hulkavcdec/SoftHulkAVCDec.cpp",
+        "hulkavcenc/SoftHulkAVCEnc.cpp",
+    ],
+
+    cflags: [
+        "-Wall",
+        "-Werror",
+    ],
+
+    include_dirs: [
+        "frameworks/av/media/libstagefright/include",
+        "frameworks/native/include/media/hardware",
+        "frameworks/native/include/media/openmax",
+    ],
+
+    shared_libs: [
+        "libstagefright_omx",
+        "libstagefright_foundation",
+        "libutils",
+        "libcutils",
+        "libui",
+        "liblog",
+    ],
+
+    sanitize: {
+        misc_undefined: [
+            "signed-integer-overflow",
+        ],
+    },
+
+    ldflags: ["-Wl,-Bsymbolic"],
+    compile_multilib: "32",
+}

@@ -145,7 +145,7 @@ Only the three quirks included above are recognized at this point:
     -->
 
     <!-- MT6592 hardware H.264 decoder: OMX component implemented in
-         frameworks/av/media/libstagefright/codecs/hulkavcdec, runs the VDEC
+         device/generalmobile/hulkbuster/media/hulkavcdec (built into libstagefrighthw.so), runs the VDEC
          hardware through libvcodecdrv.so. Listed before the Google software
          decoder so it is preferred. -->
     <Decoders>
@@ -158,6 +158,23 @@ Only the three quirks included above are recognized at this point:
             <Feature name="adaptive-playback" />
         </MediaCodec>
     </Decoders>
+
+    <!-- MT6592 hardware H.264 encoder (media/hulkavcenc, built into
+         libstagefrighthw.so, MTK VENC through libvcodecdrv.so), listed before the Google software encoder so it is
+         preferred. Input is converted to padded I420 internally. The hardware
+         handles at most 8160 macroblocks per frame (1920x1088 and 1600x1200
+         work, 1920x1200 does not); the component rejects larger sizes at
+         configure time. -->
+    <Encoders>
+        <MediaCodec name="OMX.hulk.h264.encoder" type="video/avc" >
+            <Limit name="size" min="128x96" max="1920x1088" />
+            <Limit name="alignment" value="2x2" />
+            <Limit name="block-size" value="16x16" />
+            <Limit name="block-count" range="1-8160" />
+            <Limit name="blocks-per-second" min="1" max="244800" />
+            <Limit name="bitrate" range="1-40000000" />
+        </MediaCodec>
+    </Encoders>
 
     <Include href="media_codecs_google_video.xml" />
 </MediaCodecs>
