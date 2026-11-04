@@ -1,0 +1,47 @@
+// HAL1 camera device wrapper and provider passthrough for the MTK camera HAL
+// (camera.mt6592), copied from hardware/interfaces camera/{device/1.0,
+// provider/2.4}/default with the changes this HAL needs:
+//  - support pre-O HAL1 clients,
+//  - translate the MTK shutter and jpeg callbacks,
+//  - cap advertised picture sizes per camera (ro.vendor.camera0/1.max_picture_size),
+//  - hide flash modes on cameras without a flash (ro.vendor.camera1.no_flash).
+// HIDL's passthrough loader picks up any /vendor/lib/hw library named
+// android.hardware.camera.provider@2.4-impl*.so, so the -hulkbuster provider
+// replaces the AOSP impl as long as device.mk doesn't install that one too.
+
+cc_library_shared {
+    name: "camera.device@1.0-impl-hulkbuster",
+    defaults: ["hidl_defaults"],
+    proprietary: true,
+    srcs: [
+        "CameraDevice.cpp",
+    ],
+    shared_libs: [
+        "libhidlbase",
+        "libhidlmemory",
+        "libhidltransport",
+        "libhwbinder",
+        "libutils",
+        "android.hardware.camera.device@1.0",
+        "android.hardware.camera.common@1.0",
+        "android.hardware.graphics.allocator@2.0",
+        "android.hardware.graphics.mapper@2.0",
+        "android.hardware.graphics.common@1.0",
+        "android.hidl.allocator@1.0",
+        "android.hidl.memory@1.0",
+        "libcutils",
+        "liblog",
+        "libhardware",
+        "libcamera_metadata",
+    ],
+    static_libs: [
+        "android.hardware.camera.common@1.0-helper"
+    ],
+    header_libs: [
+        "libnativebase_headers",
+        "media_plugin_headers",
+    ],
+    export_header_lib_headers: ["libnativebase_headers"],
+    export_include_dirs: ["."]
+}
+
