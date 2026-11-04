@@ -1,0 +1,5 @@
+cc_binary {
+    name: "fbclk",
+    srcs: ["fbclk.c"],
+    compile_multilib: "32",
+}
