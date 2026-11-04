@@ -70,31 +70,15 @@ frameworks-av/0001-cameraservice-cache-hal1-legacy-parameters-at-startu.patch
     parameters, so the first app open does not race the shim's own open
     and get evicted.
 
-hardware-interfaces/0001-camera-device-support-pre-O-HAL1-clients.patch
-    MediaTek's N-era HAL1 calls get_memory with a NULL cookie and takes
-    references on preview buffers as ANativeWindowBuffers; handle both.
-
 hardware-interfaces/0002-audio-allow-skipping-the-legacy-device-dump.patch
     The MTK audio.primary blob crashes in its legacy dump(); skip it when
     ro.audio.skip_legacy_dump=true (system.prop).
-
-hardware-interfaces/0003-camera-device-translate-mtk-hal1-shutter-and-jpeg-ca.patch
-    MTK delivers the shutter and the JPEG as private messages; map them to
-    CAMERA_MSG_SHUTTER and CAMERA_MSG_COMPRESSED_IMAGE so photos save.
-
-hardware-interfaces/0004-camera-device-cap-advertised-picture-sizes-per-camer.patch
-    Hides picture sizes above ro.vendor.camera<id>.max_picture_size (the
-    main camera's borrowed feature table lists upscaled sizes).
 
 packages-apps-Backgrounds/0001-Backgrounds-load-downscaled-previews-for-the-wallpap.patch
     The Wallpapers app decoded every built-in wallpaper at full size (the
     1440p set, 2560x1440) for its small grid cells. On this tablet it used
     ~380 MB and half the frames took 250-950 ms (texture uploads to the
     Mali-450). Grid previews are now decoded downscaled: 81 MB, 2.4% janky.
-
-hardware-interfaces/0006-camera-device-hide-flash-modes-on-cameras-without-a-.patch
-    The front camera got the rear camera's flash modes from a shared HAL1
-    feature table; ro.vendor.camera1.no_flash=true limits it to "off".
 
 frameworks-base/0002-SystemUI-allow-disabling-the-notification-launch-ani.patch
     persist.sys.notif_launch_anim=false (system.prop) replaces SystemUI's
@@ -105,6 +89,11 @@ frameworks-base/0003-SystemUI-grow-the-notification-launch-animation-from.patch
     The launch animation centred the expanding card horizontally, so on
     this tablet's left-side notification panel it jumped sideways first.
     It now grows from the notification's real position.
+
+Retired: hardware-interfaces 0001, 0003, 0004 and 0006 (HAL1 camera device
+wrapper changes) now live in the device tree (camera/:
+camera.device@1.0-impl-hulkbuster and
+android.hardware.camera.provider@2.4-impl-hulkbuster).
 
 Retired: hardware-interfaces 0005 and 0007 (HWC2On1Adapter fence/tearing
 fixes) now live in the device tree (hwc/: libhwc2on1adapter_hulkbuster and
