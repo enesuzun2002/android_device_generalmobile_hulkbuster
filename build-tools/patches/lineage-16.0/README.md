@@ -83,6 +83,12 @@ frameworks-av/0004-stagefright-advertise-up-to-level-4.2-on-OMX.hulk.h2.patch
     YouTube needs to pick it. Device side: configs/media_codecs.xml,
     seccomp/mediacodec.policy, PRODUCT_PACKAGES in device.mk.
 
+frameworks-av/0005-stagefright-pipeline-hulkavcdec-de-tile-queue-for-10.patch
+    1080p60 for OMX.hulk.h264.decoder: queue de-tile jobs (decode no longer
+    waits on the worker), flush only the written bitstream bytes, write the
+    de-tiled output in 64-byte bursts, 16 output buffers. 1080p60 went from
+    ~14 to ~60 fps; HW decode is ~14 ms per 1080p frame (ceiling ~68 fps).
+
 hardware-interfaces/0001-camera-device-support-pre-O-HAL1-clients.patch
     MediaTek's N-era HAL1 calls get_memory with a NULL cookie and takes
     references on preview buffers as ANativeWindowBuffers; handle both.

@@ -1,0 +1,289 @@
+From 39e81f16b48f8c6bc5e4ce8f9802d6a680a830ab Mon Sep 17 00:00:00 2001
+From: enesuzun2002 <emurat.uzun@gmail.com>
+Date: Wed, 4 Nov 2026 11:19:10 +0300
+Subject: [PATCH] stagefright: pipeline hulkavcdec de-tile queue for 1080p60
+
+Queue de-tile jobs so the decode thread never waits on the worker, flush only the written part of the bitstream buffer instead of 2 MB per AU, de-tile with 64-byte write bursts, and offer 16 output buffers.
+
+Change-Id: I3e7259f7cf1bd507e9fc77f7ab58d23d4af6a6a2
+---
+ .../codecs/hulkavcdec/HulkDetile.h            | 43 +++++++++++-
+ .../codecs/hulkavcdec/SoftHulkAVCDec.cpp      | 65 ++++++++++++-------
+ .../codecs/hulkavcdec/SoftHulkAVCDec.h        |  7 +-
+ 3 files changed, 86 insertions(+), 29 deletions(-)
+
+diff --git a/media/libstagefright/codecs/hulkavcdec/HulkDetile.h b/media/libstagefright/codecs/hulkavcdec/HulkDetile.h
+index b9f9529..29684a8 100644
+--- a/media/libstagefright/codecs/hulkavcdec/HulkDetile.h
++++ b/media/libstagefright/codecs/hulkavcdec/HulkDetile.h
+@@ -23,7 +23,24 @@ static inline void hulkDetileI420(
+         const int rows = (h - y0) < 32 ? (h - y0) : 32;
+         const uint8_t *tileRow = src + (size_t)(y0 >> 5) * tilesPerRow * 512;
+         uint8_t *d = dstY + (size_t)y0 * dstYStride;
+-        for (int bx = 0; bx * 16 < w; bx++) {
++        int bx = 0;
++#if defined(__ARM_NEON__) || defined(__ARM_NEON)
++        if (rows == 32) {
++            // four tiles at a time: every destination row gets a full 64-byte burst
++            for (; (bx + 4) * 16 <= w; bx += 4) {
++                const uint8_t *t = tileRow + (size_t)bx * 512;
++                uint8_t *dd = d + bx * 16;
++                for (int k = 0; k < 4 * 512; k += 64) __builtin_prefetch(t + 4 * 512 + k);
++                for (int r = 0; r < 32; r++) {
++                    uint8x16_t a0 = vld1q_u8(t + r * 16), a1 = vld1q_u8(t + 512 + r * 16);
++                    uint8x16_t a2 = vld1q_u8(t + 1024 + r * 16), a3 = vld1q_u8(t + 1536 + r * 16);
++                    uint8_t *o = dd + (size_t)r * dstYStride;
++                    vst1q_u8(o, a0); vst1q_u8(o + 16, a1); vst1q_u8(o + 32, a2); vst1q_u8(o + 48, a3);
++                }
++            }
++        }
++#endif
++        for (; bx * 16 < w; bx++) {
+             const uint8_t *t = tileRow + (size_t)bx * 512;
+             uint8_t *dd = d + bx * 16;
+             const int n = (w - bx * 16) < 16 ? (w - bx * 16) : 16;
+@@ -73,7 +90,29 @@ static inline void hulkDetileI420(
+         const uint8_t *tileRow = uvBase + (size_t)(y0 >> 4) * tilesPerRow * 256;
+         uint8_t *du = dstU + (size_t)y0 * dstCStride;
+         uint8_t *dv = dstV + (size_t)y0 * dstCStride;
+-        for (int bx = 0; bx * 8 < cw; bx++) {
++        int bx = 0;
++#if defined(__ARM_NEON__) || defined(__ARM_NEON)
++        if (rows == 16) {
++            // eight chroma tiles at a time: 64-byte bursts into both planes
++            for (; (bx + 8) * 8 <= cw; bx += 8) {
++                const uint8_t *t = tileRow + (size_t)bx * 256;
++                for (int k = 0; k < 8 * 256; k += 64) __builtin_prefetch(t + 8 * 256 + k);
++                for (int r = 0; r < 16; r++) {
++                    uint8x8x2_t p0 = vld2_u8(t + r * 16), p1 = vld2_u8(t + 256 + r * 16);
++                    uint8x8x2_t p2 = vld2_u8(t + 512 + r * 16), p3 = vld2_u8(t + 768 + r * 16);
++                    uint8x8x2_t p4 = vld2_u8(t + 1024 + r * 16), p5 = vld2_u8(t + 1280 + r * 16);
++                    uint8x8x2_t p6 = vld2_u8(t + 1536 + r * 16), p7 = vld2_u8(t + 1792 + r * 16);
++                    uint8_t *ou = du + (size_t)r * dstCStride + bx * 8;
++                    uint8_t *ov = dv + (size_t)r * dstCStride + bx * 8;
++                    vst1q_u8(ou, vcombine_u8(p0.val[0], p1.val[0])); vst1q_u8(ou + 16, vcombine_u8(p2.val[0], p3.val[0]));
++                    vst1q_u8(ou + 32, vcombine_u8(p4.val[0], p5.val[0])); vst1q_u8(ou + 48, vcombine_u8(p6.val[0], p7.val[0]));
++                    vst1q_u8(ov, vcombine_u8(p0.val[1], p1.val[1])); vst1q_u8(ov + 16, vcombine_u8(p2.val[1], p3.val[1]));
++                    vst1q_u8(ov + 32, vcombine_u8(p4.val[1], p5.val[1])); vst1q_u8(ov + 48, vcombine_u8(p6.val[1], p7.val[1]));
++                }
++            }
++        }
++#endif
++        for (; bx * 8 < cw; bx++) {
+             const uint8_t *t = tileRow + (size_t)bx * 256;
+             const int n = (cw - bx * 8) < 8 ? (cw - bx * 8) : 8;
+             if (n == 8) {
+diff --git a/media/libstagefright/codecs/hulkavcdec/SoftHulkAVCDec.cpp b/media/libstagefright/codecs/hulkavcdec/SoftHulkAVCDec.cpp
+index 33f5b34..feb737d 100644
+--- a/media/libstagefright/codecs/hulkavcdec/SoftHulkAVCDec.cpp
++++ b/media/libstagefright/codecs/hulkavcdec/SoftHulkAVCDec.cpp
+@@ -28,7 +28,7 @@
+ namespace android {
+ 
+ static double nowSec() { timespec t; clock_gettime(CLOCK_MONOTONIC, &t); return t.tv_sec + t.tv_nsec * 1e-9; }
+-static double gTDec, gTWait, gTDet; static unsigned gN;
++static double gTDec, gTWait, gTDet, gLastFbd, gMaxGap, gBusy, gInval, gOQ, gDrain, gPre, gDeliver; static unsigned gN, gQCalls, gNoOut, gNoIn, gGap50, gDecN;
+ 
+ #define componentName "video_decoder.avc"
+ #define codingType    OMX_VIDEO_CodingAVC
+@@ -216,12 +216,11 @@ SoftHulkAVC::SoftHulkAVC(
+       mSpsW(0), mSpsH(0), mSpsCodedW(0), mSpsCodedH(0), mLastTs(0),
+       mReceivedEOS(false), mEosFlushed(false), mSignalledError(false),
+       mNeedReinit(false), mNewW(0), mNewH(0), mFramesOut(0), mDecodeErrors(0),
+-      mWExit(false), mGen(0), mDumpFile(NULL), mDumpLeft(0), mDumpIn(NULL), mInCount(0), mDecCount(0) {
++      mWBusy(false), mWExit(false), mGen(0), mDumpFile(NULL), mDumpLeft(0), mDumpIn(NULL), mInCount(0), mDecCount(0) {
+     memset(&mBs, 0, sizeof(mBs));
+-    memset(&mJob, 0, sizeof(mJob));
+     initPorts(
+             1 /* numMinInputBuffers */, kNumBuffers, 1024 * 1024,
+-            1 /* numMinOutputBuffers */, kNumBuffers, MEDIA_MIMETYPE_VIDEO_AVC);
++            1 /* numMinOutputBuffers */, kNumOutBuffers, MEDIA_MIMETYPE_VIDEO_AVC);
+     {
+         // debug aid: debug.hulk.dump=<nframes> dumps the first frames as I420
+         char v[PROPERTY_VALUE_MAX];
+@@ -238,7 +237,7 @@ SoftHulkAVC::SoftHulkAVC(
+ SoftHulkAVC::~SoftHulkAVC() {
+     {
+         std::unique_lock<std::mutex> l(mWMutex);
+-        mWCv.wait(l, [&] { return !mJob.valid; });
++        mWCv.wait(l, [&] { return mJobs.empty() && !mWBusy; });
+         mWExit = true;
+         mWCv.notify_all();
+     }
+@@ -276,12 +275,14 @@ int SoftHulkAVC::findFb(const void *p) {
+ void SoftHulkAVC::workerLoop() {
+     std::unique_lock<std::mutex> l(mWMutex);
+     for (;;) {
+-        mWCv.wait(l, [&] { return mWExit || mJob.valid; });
+-        if (!mJob.valid) {
++        mWCv.wait(l, [&] { return mWExit || !mJobs.empty(); });
++        if (mJobs.empty()) {
+             if (mWExit) break;
+             continue;
+         }
+-        Job j = mJob;
++        Job j = mJobs.front();
++        mJobs.pop_front();
++        mWBusy = true;
+         l.unlock();
+ 
+         OMX_BUFFERHEADERTYPE *hdr = j.hdr;
+@@ -289,6 +290,7 @@ void SoftHulkAVC::workerLoop() {
+             uint8_t *dst = hdr->pBuffer + hdr->nOffset;
+             size_t sizeY = (size_t)j.outW * j.outH;
+             double td = nowSec();
++            gDrv.inval(&mFbs[j.idx]->mem, sizeof(ValMem), 1);
+             hulkDetileI420((const uint8_t *)mFbs[j.idx]->mem.alignVa, j.stride, j.sliceH, j.w, j.h,
+                            dst, j.outW, dst + sizeY, dst + sizeY + sizeY / 4, j.outW / 2);
+             gTDet += nowSec() - td;
+@@ -312,17 +314,18 @@ void SoftHulkAVC::workerLoop() {
+                     fwrite(dst + sizeY + p * (sizeY / 4) + (size_t)y * (j.outW / 2), 1, j.w / 2, mDumpFile);
+             if (--mDumpLeft == 0) { fclose(mDumpFile); mDumpFile = NULL; }
+         }
++        { double t=nowSec(); if (gLastFbd>0){double g=t-gLastFbd; if(g>gMaxGap)gMaxGap=g; if(g>0.05)gGap50++;} gLastFbd=t; }
+         notifyFillBufferDone(hdr);
+ 
+         l.lock();
+-        mJob.valid = false;
++        mWBusy = false;
+         mWCv.notify_all();
+     }
+ }
+ 
+ void SoftHulkAVC::waitWorkerIdle() {
+     std::unique_lock<std::mutex> l(mWMutex);
+-    mWCv.wait(l, [&] { return !mJob.valid; });
++    mWCv.wait(l, [&] { return mJobs.empty() && !mWBusy; });
+ }
+ 
+ // ---------------------------------------------------------------------------
+@@ -475,7 +478,6 @@ void SoftHulkAVC::drain() {
+             mTs.erase(mTs.begin());
+         }
+         mLastTs = ts;
+-        gDrv.inval(&mFbs[idx]->mem, sizeof(ValMem), 1);
+         {
+             std::lock_guard<std::mutex> fl(mFbLock);
+             mFbs[idx]->pending = true;
+@@ -515,20 +517,27 @@ bool SoftHulkAVC::decodeAu(const uint8_t *au, size_t len) {
+     }
+     if (idx >= 0) mFbs[idx]->released = false; else ALOGW("no free fb for decode");
+ 
++    double tp = nowSec();
+     memcpy(mBs.alignVa, au, len);
+-    gDrv.flush(&mBs, sizeof(ValMem), 1);
++    {
++        // flush only the bytes we wrote (flushing the whole 2 MB buffer costs ~1.7 ms per AU)
++        ValMem part = mBs;
++        part.size = (uint32_t)((len + 4095) & ~(size_t)4095);
++        gDrv.flush(&part, sizeof(ValMem), 1);
++    }
+     Bs bs = { (uint32_t)mBs.alignVa, mBs.alignMva, (uint32_t)len, (uint32_t)mBs.alignVa,
+               (uint32_t)mBs.alignVa + (uint32_t)len, 0, (uint32_t)mBs.alignVa, 0 };
++    gPre += nowSec() - tp;
+     if (mDumpIn) { fwrite(au, 1, len, mDumpIn); fflush(mDumpIn); }
+     double t0 = nowSec();
+     int rc = gDrv.decode(mH, &bs, idx >= 0 ? &mFbs[idx]->fb : NULL);
+-    gTDec += nowSec() - t0;
++    gTDec += nowSec() - t0; gDecN++;
+     if (rc != 0) {
+         if ((mDecodeErrors++ & 63) == 0) ALOGW("decode returned %d (count %u)", rc, mDecodeErrors);
+     }
+     size_t before = mPending.size();
+     (void)before;
+-    drain();
++    double tdr = nowSec(); drain(); gDrain += nowSec() - tdr;
+     ALOGV("decode rc=%d len=%zu pending=%zu", rc, len, mPending.size());
+     return rc == 0;
+ }
+@@ -710,19 +719,25 @@ bool SoftHulkAVC::deliverFrame(List<BufferInfo *> &outQ) {
+     }
+ 
+     double tw = nowSec();
+-    waitWorkerIdle();
++    {
++        // bounded queue: only block if the worker is far behind
++        std::unique_lock<std::mutex> l(mWMutex);
++        mWCv.wait(l, [&] { return mJobs.size() < kMaxJobs; });
++    }
+     gTWait += nowSec() - tw;
+     if (++gN % 60 == 0) {
+-        ALOGV("avg ms/frame: decode %.1f waitWorker %.1f detile %.1f", gTDec * 1000 / 60, gTWait * 1000 / 60, gTDet * 1000 / 60);
+-        gTDec = gTWait = gTDet = 0;
++        ALOGV("TIMING per frame ms: decode %.1f waitWorker %.1f detile %.1f | qcalls %u noOut %u noIn %u gaps>50ms %u maxgap %.0fms (decn %u) pre %.2f drain %.2f deliver %.2f busy %.1f inval %.1f avgOutQ %.2f", gTDec * 1000 / 60, gTWait * 1000 / 60, gTDet * 1000 / 60, gQCalls, gNoOut, gNoIn, gGap50, gMaxGap*1000, gDecN, gPre*1000/60, gDrain*1000/60, gDeliver*1000/60, gBusy*1000/60, gInval*1000/60, gOQ/(gQCalls?gQCalls:1));
++        gBusy = gInval = gOQ = gPre = gDrain = gDeliver = 0;
++        gTDec = gTWait = gTDet = 0; gQCalls = gNoOut = gNoIn = gGap50 = gDecN = 0; gMaxGap = 0;
+     }
+     {
+         std::lock_guard<std::mutex> l(mWMutex);
+-        mJob.valid = true;
+-        mJob.idx = pf.idx; mJob.hdr = hdr;
+-        mJob.w = pf.w; mJob.h = pf.h; mJob.stride = pf.stride; mJob.sliceH = pf.sliceH;
+-        mJob.outW = outW; mJob.outH = outH;
+-        mJob.gen = mGen.load();
++        Job j;
++        j.idx = pf.idx; j.hdr = hdr;
++        j.w = pf.w; j.h = pf.h; j.stride = pf.stride; j.sliceH = pf.sliceH;
++        j.outW = outW; j.outH = outH;
++        j.gen = mGen.load();
++        mJobs.push_back(j);
+         mWCv.notify_all();
+     }
+     mFramesOut++;
+@@ -735,9 +750,11 @@ void SoftHulkAVC::onQueueFilled(OMX_U32 portIndex) {
+ 
+     List<BufferInfo *> &inQ = getPortQueue(kInputPortIndex);
+     List<BufferInfo *> &outQ = getPortQueue(kOutputPortIndex);
++    gQCalls++; gOQ += outQ.size(); double tq0 = nowSec();
++    struct Busy { double t; ~Busy(){ gBusy += nowSec()-t; } } busy{tq0};
+ 
+     for (;;) {
+-        while (!mPending.empty() && !outQ.empty()) deliverFrame(outQ);
++        { double td = nowSec(); while (!mPending.empty() && !outQ.empty()) deliverFrame(outQ); gDeliver += nowSec() - td; }
+         if (!mPending.empty()) return;
+ 
+         if (mEosFlushed) {
+@@ -768,7 +785,7 @@ void SoftHulkAVC::onQueueFilled(OMX_U32 portIndex) {
+             if (reset) return;
+         }
+ 
+-        if (inQ.empty() || outQ.empty()) return;
++        if (inQ.empty() || outQ.empty()) { if (outQ.empty()) gNoOut++; else gNoIn++; return; }
+ 
+         BufferInfo *inInfo = *inQ.begin();
+         OMX_BUFFERHEADERTYPE *hdr = inInfo->mHeader;
+diff --git a/media/libstagefright/codecs/hulkavcdec/SoftHulkAVCDec.h b/media/libstagefright/codecs/hulkavcdec/SoftHulkAVCDec.h
+index ada6c1b..a00f349 100644
+--- a/media/libstagefright/codecs/hulkavcdec/SoftHulkAVCDec.h
++++ b/media/libstagefright/codecs/hulkavcdec/SoftHulkAVCDec.h
+@@ -31,7 +31,8 @@ protected:
+     virtual int getColorAspectPreference();
+ 
+ private:
+-    enum { kNumBuffers = 8 };
++    enum { kNumBuffers = 8, kNumOutBuffers = 16 };
++    static const size_t kMaxJobs = 4;
+ 
+     // ---- driver-visible structures (see vdectest for the protocol) ----
+     struct ValMem {
+@@ -61,7 +62,6 @@ private:
+     };
+ 
+     struct Job {
+-        bool valid;
+         int idx;
+         OMX_BUFFERHEADERTYPE *hdr;
+         int w, h, stride, sliceH;
+@@ -104,7 +104,8 @@ private:
+     std::thread mWorker;
+     std::mutex mWMutex;
+     std::condition_variable mWCv;
+-    Job mJob;
++    std::deque<Job> mJobs;
++    bool mWBusy;
+     bool mWExit;
+     std::atomic<uint32_t> mGen;
+     FILE *mDumpFile;
+-- 
+2.56.0
+
