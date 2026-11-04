@@ -50,7 +50,9 @@ extern "C"
 	 * Speaker digital boost. With the analog buffer already at its +9 dB
 	 * maximum (kernel hp_gain_floor) the speaker is still quiet, so scale the
 	 * PCM going to the speaker by persist.vendor.audio.spk_boost_mb (millibel,
-	 * default 200 = +2 dB; +6 dB clipped audibly) with saturation. Only while routed to the speaker.
+	 * e.g. 200 = +2 dB; +6 dB clipped audibly) with saturation. Only while
+	 * routed to the speaker. Off by default: even +2 dB distorted on loud
+	 * content.
 	 */
 	static volatile int g_spk_routed = 1;
 	static int32_t g_boost_q16 = 65536;
@@ -60,7 +62,7 @@ extern "C"
 
 	static void update_boost(void)
 	{
-		int mb = property_get_int32("persist.vendor.audio.spk_boost_mb", 200);
+		int mb = property_get_int32("persist.vendor.audio.spk_boost_mb", 0);
 		if (mb < 0) mb = 0;
 		if (mb > 1200) mb = 1200;
 		g_boost_q16 = (int32_t)(65536.0 * pow(10.0, mb / 2000.0));
