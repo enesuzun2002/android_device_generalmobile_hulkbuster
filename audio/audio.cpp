@@ -4,6 +4,7 @@
 #include <utils/StrongPointer.h>
 #include <hardware/audio.h>
 #include <stdlib.h>
+#include <errno.h>
 #include <string.h>
 #include <dlfcn.h>
 #include <math.h>
@@ -151,6 +152,92 @@ extern "C"
 		return ret;
 	}
 
+	/*
+	 * Input streams. The MTK blob allocates struct legacy_stream_in as
+	 * { struct audio_stream_in stream; AudioStreamIn *legacy_in; } with the
+	 * pre-Android-6 audio_stream_in, so the framework's get_capture_position
+	 * slot (added to the struct later) overlaps legacy_in. The audio HAL
+	 * client calls it whenever it is non-NULL and jumped into the heap object
+	 * on the first capture read (SIGSEGV in ReadThread), killing the audio HAL
+	 * on any recording. Hand out a full-size zeroed audio_stream_in that
+	 * forwards to the blob's stream instead.
+	 */
+	struct hulk_in {
+		struct audio_stream_in stream;	/* must stay first */
+		struct audio_stream_in *orig;
+	};
+	static int (*orig_open_input_stream)(struct audio_hw_device *, audio_io_handle_t,
+			audio_devices_t, struct audio_config *, struct audio_stream_in **,
+			audio_input_flags_t, const char *, audio_source_t) = NULL;
+	static void (*orig_close_input_stream)(struct audio_hw_device *, struct audio_stream_in *) = NULL;
+
+	#define HIN(s) (((struct hulk_in *)(s))->orig)
+	static uint32_t hin_get_sample_rate(const struct audio_stream *s) { return HIN(s)->common.get_sample_rate(&HIN(s)->common); }
+	static int hin_set_sample_rate(struct audio_stream *s, uint32_t r) { return HIN(s)->common.set_sample_rate(&HIN(s)->common, r); }
+	static size_t hin_get_buffer_size(const struct audio_stream *s) { return HIN(s)->common.get_buffer_size(&HIN(s)->common); }
+	static audio_channel_mask_t hin_get_channels(const struct audio_stream *s) { return HIN(s)->common.get_channels(&HIN(s)->common); }
+	static audio_format_t hin_get_format(const struct audio_stream *s) { return HIN(s)->common.get_format(&HIN(s)->common); }
+	static int hin_set_format(struct audio_stream *s, audio_format_t f) { return HIN(s)->common.set_format(&HIN(s)->common, f); }
+	static int hin_standby(struct audio_stream *s) { return HIN(s)->common.standby(&HIN(s)->common); }
+	static int hin_dump(const struct audio_stream *s, int fd) { return HIN(s)->common.dump(&HIN(s)->common, fd); }
+	static audio_devices_t hin_get_device(const struct audio_stream *s) { return HIN(s)->common.get_device(&HIN(s)->common); }
+	static int hin_set_device(struct audio_stream *s, audio_devices_t d) { return HIN(s)->common.set_device(&HIN(s)->common, d); }
+	static int hin_set_parameters(struct audio_stream *s, const char *kv) { return HIN(s)->common.set_parameters(&HIN(s)->common, kv); }
+	static char *hin_get_parameters(const struct audio_stream *s, const char *keys) { return HIN(s)->common.get_parameters(&HIN(s)->common, keys); }
+	static int hin_add_audio_effect(const struct audio_stream *s, effect_handle_t e) { return HIN(s)->common.add_audio_effect(&HIN(s)->common, e); }
+	static int hin_remove_audio_effect(const struct audio_stream *s, effect_handle_t e) { return HIN(s)->common.remove_audio_effect(&HIN(s)->common, e); }
+	static int hin_set_gain(struct audio_stream_in *s, float g) { return HIN(s)->set_gain(HIN(s), g); }
+	static ssize_t hin_read(struct audio_stream_in *s, void *buf, size_t bytes) { return HIN(s)->read(HIN(s), buf, bytes); }
+	static uint32_t hin_get_input_frames_lost(struct audio_stream_in *s) { return HIN(s)->get_input_frames_lost(HIN(s)); }
+
+	static int hulk_open_input_stream(struct audio_hw_device *dev,
+			audio_io_handle_t handle, audio_devices_t devices,
+			struct audio_config *config, struct audio_stream_in **stream_in,
+			audio_input_flags_t flags, const char *address, audio_source_t source)
+	{
+		struct audio_stream_in *orig = NULL;
+		int ret = orig_open_input_stream(dev, handle, devices, config, &orig,
+				flags, address, source);
+		if (ret != 0 || orig == NULL) {
+			*stream_in = orig;
+			return ret;
+		}
+		struct hulk_in *w = (struct hulk_in *)calloc(1, sizeof(*w));
+		if (w == NULL) {
+			orig_close_input_stream(dev, orig);
+			return -ENOMEM;
+		}
+		w->orig = orig;
+		w->stream.common.get_sample_rate = hin_get_sample_rate;
+		w->stream.common.set_sample_rate = hin_set_sample_rate;
+		w->stream.common.get_buffer_size = hin_get_buffer_size;
+		w->stream.common.get_channels = hin_get_channels;
+		w->stream.common.get_format = hin_get_format;
+		w->stream.common.set_format = hin_set_format;
+		w->stream.common.standby = hin_standby;
+		w->stream.common.dump = hin_dump;
+		w->stream.common.get_device = hin_get_device;
+		w->stream.common.set_device = hin_set_device;
+		w->stream.common.set_parameters = hin_set_parameters;
+		w->stream.common.get_parameters = hin_get_parameters;
+		w->stream.common.add_audio_effect = hin_add_audio_effect;
+		w->stream.common.remove_audio_effect = hin_remove_audio_effect;
+		w->stream.set_gain = hin_set_gain;
+		w->stream.read = hin_read;
+		w->stream.get_input_frames_lost = hin_get_input_frames_lost;
+		*stream_in = &w->stream;
+		return 0;
+	}
+
+	static void hulk_close_input_stream(struct audio_hw_device *dev, struct audio_stream_in *stream)
+	{
+		if (stream == NULL)
+			return;
+		struct hulk_in *w = (struct hulk_in *)stream;
+		orig_close_input_stream(dev, w->orig);
+		free(w);
+	}
+
 	static int legacy_adev_open(const hw_module_t *module, const char *name,
 		                hw_device_t **device)
 	{
@@ -178,6 +265,12 @@ extern "C"
 			if (adev->open_output_stream != NULL) {
 				orig_open_output_stream = adev->open_output_stream;
 				adev->open_output_stream = hulk_open_output_stream;
+			}
+			if (adev->open_input_stream != NULL && adev->close_input_stream != NULL) {
+				orig_open_input_stream = adev->open_input_stream;
+				orig_close_input_stream = adev->close_input_stream;
+				adev->open_input_stream = hulk_open_input_stream;
+				adev->close_input_stream = hulk_close_input_stream;
 			}
 			apply_speaker_enhancement(adev);
 		}
