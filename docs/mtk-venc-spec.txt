@@ -1,0 +1,108 @@
+MTK MT6592 H.264 HW ENCODER via libvcodecdrv.so (eVEncDrv*)  -- static RE spec
+Sources: vendor tree libvcodecdrv.so (395720 B), libMtkOmxVenc.so (100040 B, byte-size identical to the 7.1.2 one),
+libvcodec_utility.so, libmtk_drvb.so. Addresses = file vaddr in that file. Disassembly in this dir: drv.dis omx.dis util.dis.
+Conventions: wrapper functions return 0 = success, 1 = failure (OMX tests "== 1" as error).
+
+1. EXPORTED API (libvcodecdrv.so)               [all ARM32, 0 = OK]
+ eVEncDrvQueryCapability(u32 type, void *in, void *out)   0xda5d   (not needed for encoding; see 4)
+ eVEncDrvCreate(void **pHandle, u32 codecId)               0xdccd
+ eVEncDrvInit(void *h)                                     0xdf0d   (1 arg only; no bitstream/header)
+ eVEncDrvSetParam(void *h, u32 type, void *param, void *unused)   0xe02f
+ eVEncDrvGetParam(void *h, u32 type, void *p2, void *out) 0xe021   STUB: returns 0; only type 7 writes *out=5. Does NOT fill the param struct.
+ eVEncDrvEncode(void *h, u32 type, void *inFrm, void *outBS, void *result)   0xe069
+ eVEncDrvDeInit(void *h)  0xe17d ;  eVEncDrvRelease(void *h /*2nd arg ignored*/) 0xe251
+Codec ids (eVEncDrvCreate switch @0xddd8, jump table): 1,3,4 -> gMPEG4_ENC_DRV_SW_IF (libmp4enc_sa.ca7.so, dlopen'd; MPEG4/H263),
+ 2 -> FAIL, 5 -> gH264_ENC_DRV_HW_IF (0x451dc)  ==> **H.264 = 5**. (MtkOmxVenc::drvCodecId 0x8b58: AVC->5; "12" when multislice flags; HEVC/VP8 ids 9/11/6 are unsupported by this driver.)
+ Confirmed also: OMX QueryDriverH264Enc builds {fmt=5,profile,level,...}. Valid ids per wrappers: mask 0b11101 (ids 1,3,4,5).
+ Handle = 708-byte struct allocated by Create via eVideoMemAlloc (type1,size 708,align 32); *pHandle = its VA. Layout: +0 id, +4 init fn, +8 encode fn,
+ +12 getparam fn, +16 setparam fn, +20 deinit fn, +24 codec-internal ctx (malloc 1476 B), +28.. HAL/val glue. gH264_ENC_DRV_HW_IF = {h264_enc_init 0x2b7e9, encode 0x2b9d9, getParameter 0x2b7ad, setParameter 0x2bc65, deInit 0x2bf45}.
+ Create also reads props (dump options: fopen when set) -- harmless.
+ Init (H264) = eValInit({5,0}) -> eHalInit -> h264_enc_init: eHalCmdProc(2,...) x2, Query(6)->chip id 10 stored (MT6592 = chip 10), H264_GetHWRegBase (eHalGetMMAP, regs 0x1000 B).
+ Workbuffers (H264_AllocWorkBuf 0x2d315) are eVideoMemAlloc'd by the driver itself at the first SetParam(6) (and SetParam 14).
+
+2. STRUCTS (omx+offset names refer to MtkOmxVenc object; they are plain structs)
+ 2.1 ENC PARAM  (SetParam type 6, 100+ bytes; MtkOmxVenc+1428; driver copies 100 B to h+820)  -- log string in omx confirms names
+   +0  u32 eYuvFormat   3 = I420 (Y,U,V contiguous), 5 = YV12 (Y,V,U; chroma stride align16(w/2))   [CheckFormatToDrv 0x10184, dpFormatMap 0x1024c -> DP I420 / DP YV12]
+   +4  u32 profile      OMX->drv: Baseline(1)->1, Main(2)->4, Extended(4)->8, High(8)->16, High10->32, High422->64, High444->128   (0x90e4). Driver turns it into profile_idc 66/77/100 (H264_GetProfile). Baseline also forces CAVLC/no B etc (CheckHWParameter: profile 66 zeroes several tool flags).
+   +8  u32 level        OMX level bit -> drv: L1(1)->2, 1b->3, 1.1->4, 1.2->5, 1.3->6, 2->7, 2.1->8, 2.2->9, 3->10, 3.1->11, 3.2->12, 4->13, 4.1->14, 4.2->15, 5->16, 5.1->17   (0x913c)
+   +12 u32 width        (display width, h+16)
+   +16 u32 height       (h+20; driver rounds height up to mult of 32 only if MBAFF byte set)
+   +20 u32 bufWidth     (h+28)  = align16(width)   [EncSettingDrvResolution 0x8dc8; also >= stride if converted]
+   +24 u32 bufHeight    (h+32)  = align16(height)
+   +28 u32 NumPFrm  (omx sets 29; NOT read by H264 HW path)    +32 u32 NumBFrm (0)
+   +36 u32 frameRate int (omx puts [458]=fps)   (driver ignores; uses extra)       +40 u8 interlace (0)
+   +44 void *pExtra -> struct EXTRA { +0 u32 IntraFrameRate (= GOP length in FRAMES; IDR when frameNo % this == 0; 0 => only first frame ... see below),
+                                      +4 u32 bitrate in bits/s (driver /1000 -> kbps, h+144; clamp 200..60000 kbps),
+                                      +8 u32 frameRate Q16 (high half at +10 = integer fps -> h+148) }   (omx: IntraFrameRate = [676]==-1 ? fps : ([676]==0?1:[676]))
+   +98 u8 fgMBAFF (0)
+   Driver defaults set inside SetParam(6): rate control on (h+176=1), QP init 22 etc, ref frames 1, slices 1.  Reject/NO-OP guard: if EXTRA+0 <= 252 and EXTRA+4 == magic word at 0x2db8c an "extended param" path is taken -- bitrate won't equal it.
+ 2.2 FRAME INPUT (4th arg of Encode type 4 = "inFrm"; MtkOmxVenc+1300; OmxMVAEntry::setToVencFrm 0x7c72)
+   +0 u32 VA (cached/uncached CPU ptr; used for cache flush)   +4 u32 MVA (M4U addr of Y plane; HW reg 0x6c = mva>>4 => 16-byte aligned)
+   +8 u32 size (Y+chroma bytes; driver flushes [VA, VA+size) -- chip 10 flush path 0x2d18a)   +24/+28 u64 timestamp (omx bookkeeping only)
+   Plane addressing is computed from MVA: I420: U = mva + bufW*bufH, V = U + bufW*bufH/4 (H264_EncodeFrameEnc 0x2fe11, regs 0x70 / 0x130). YV12: first chroma=Y+bufW*bufH, second = first + (bufH/2)*align16(bufW/2).
+   Input is read by HW through M4U => needs a valid MVA, NOT physically contiguous requirement (M4U maps scattered pages) but buffer must be M4U-mapped.
+ 2.3 BITSTREAM OUT (4th arg "outBS"; MtkOmxVenc+1268; setToVencBS 0x7c5e)  32 bytes copied by driver
+   +0 u32 VA   +4 u32 MVA (reg 0x64 = mva>>4)   +8 u32 capacity bytes (reg 0x68 = size>>7: use multiple of 128)   +12 u32 VA again   +16 u32 OUTPUT LENGTH (driver writes: HW reg 0x98)  +20..+28 unused(0)
+ 2.4 RESULT (5th arg; omx stack sp+100)   +0 u32 status (omx pre-sets 1), +4 BS* (driver stores pointer to outBS), +12 u8 isKeyFrame (IDR)
+   status after Encode(type 4): 4 = one frame produced (size in outBS+16); 3 = no output / dropped frame (return buffer empty); anything else = error (omx treats as error).
+   Wrapper return: 0 = OK. (internal H264_EncodeFrame 0x303a9 state machine 0=Init 1=Enc 2=PartEnc 3=Skip 4=Deinit 5=Err; internally loops).
+ 2.5 ValMem (VAL_MEMORY_T, 48 B) = same struct as decoder (vdectest.cpp): {type,size,va,mva,align,alignVa,alignMva,codec,...,m4u}. Driver-internal allocs use type=1, codec=0.
+   eVideoAllocMVA(m4uHandle, va, &mva, size, opts) (OMX path for ion buffers): module 28 when opts==NULL? -> see util 0x5625: opts==NULL ->10 else opts[0]==0 -> 28. OMX Venc passes opts with [0]=0 => module 28 (same as decoder, codec field 0).
+
+3. CALL SEQUENCE (libMtkOmxVenc)
+ Session:  InitVideoEncodeHW 0xa958:
+   eVEncDrvCreate(&h, 5)
+   eVEncDrvSetParam(h, 20, {u32 width,height,stride(buf w),sliceH(buf h)}, 0)   -> eHalEMICtrlForRecordSize (EMI bandwidth hint; omx always does it before Init)
+   eVEncDrvInit(h)
+   (secure only) SetParam(h,25,{4})                 -- skip
+ First EncodeFunc 0xad74 (once, before first frame): setDrvParamBeforeHdr 0xa810:
+   [optional SetParam 19 (CheckHWParameter)], EncSettingEnc -> EncSettingH264Enc 0xa648:
+        eVEncDrvGetParam(h,4,0,&param)  (no-op), fill param (2.1), eVEncDrvSetParam(h, 6, &param, 0)
+   eVEncDrvSetParam(h, 7, 0, 0)  (begin; no-op)
+   eVEncDrvEncode(h, 1, NULL, &outBS, &result)  -> writes SPS+PPS (Annex-B w/ start codes) into outBS, size outBS+16. OMX returns it as its own output buffer flagged CODECCONFIG (0x80).
+      (type 2 = SPS only, 3 = PPS only, 1 = both; drv 0x2b9d9 switch)
+ Per frame: preEncProcess; setDrvParamBeforeEnc 0x9ec4; then
+   eVEncDrvEncode(h, 4, &frm, &outBS, &result)   (frm.VA/MVA/size set; timestamp fields optional)
+   flush rules: driver flushes the input VA range and out BS itself for chip 10 (H264_FlushCache 0x2d141) -> OMX does no extra flush for non-converted input.
+   after: setDrvParamAfterEnc -> SetParam(h,12) (no-op).
+   result.status==4: size = outBS+16 ; key = result+12 ; OMX flags: SYNC (0x20) if key.  Output NAL has 4-byte start code (driver checks NAL type at byte 4 == 5 for IDR).
+ Runtime SetParam types (H264, driver 0x2bc65 jump table):  (param pointer layouts)
+   6  = full enc param (2.1; also allocs work bufs)       7/8/12 = begin/end/after (no-ops)      11 = FORCE I-FRAME next frame (resets frame counter h+808/h+960; no param)
+   14/16 = alloc/free work buffers (6 does it implicitly)  17 = SET BITRATE, param = u32[4]{_,bps,_,_} (bps at +4; /1000, clamp 200..60000 kbps)
+   18 = set I-frame interval in SECONDS (param u32 secs; driver multiplies by current fps -> h+40)    22 = set frame rate, param = u32 fps (u16 [1138])
+   24 = skip(drop) next P-frame  26 = prepend SPS/PPS to every IDR (sets h+1040, permanent)   31 = ? (h+1460 flag), 32 = max/min QP (param u32 <=51)
+   19 = CheckHWParameter (omx: size/secure flag)      20 = record size (see above)      25 = wrapper-only secure flag (not forwarded)
+ Teardown (DeInitVideoEncodeHW 0x8bdc): SetParam(h,8) if started; eVEncDrvDeInit(h); eVEncDrvRelease(h).
+ Keyframes: automatic IDR at frameNo % EXTRA.IntraFrameRate == 0 (first frame always IDR; H264_EncodeFrameInit 0x2f3e1); SetParam 11 forces next frame IDR.
+ Memory: OMX buffers are ION/gralloc mapped to MVA via OmxM4uMVAMap (eVideoInitMVA/eVideoAllocMVA/eVideoFreeMVA). For a standalone tool use eVideoMemAlloc (48 B ValMem, type 2 uncached, align 512 or 64+, codec 0) for input AND output: va=alignVa, mva=alignMva.
+
+4. OBSTACLES
+ - drvb: only eVEncDrvQueryCapability type 1 (and the shared helper @0xd88c arg 1) calls drvb_f1 (anti-tamper, libmtk_drvb). Create/Init/SetParam/Encode/DeInit/Release never reach drvb_f1/drvb_*.
+   Our client must therefore NOT call eVEncDrvQueryCapability(1,...). Types 4/6 (chip id = 10 for MT6592) and 7 (align16 of w/h) are safe.
+ - Helper 0xd88c also: open("/dev/devmap") + ioctl (fuse/1080p capability), seteuid/setegid juggling if uid==0 euid!=0.
+ - Limits: HW/omx: AVC size 128x96 .. 1920x1080 (old media_codecs.xml), 16x16 alignment, fps <= 30 (60 at <=720p-ish), bitrate clamp 200..60000 kbps, profile<=High, no B frames. Chip 10 (MT6592).
+ - Input must be planar I420 (id 3) or YV12 (id 5) in an M4U-mapped buffer. NV12/NV21 (OMX YUV420SemiPlanar 21) are NOT accepted by libMtkOmxVenc nor by the HW regs here -> do SW conversion. libMtkOmxVenc color-converts with DpBlitStream (libdpframework) when input is RGB (OMX fmts 6,11,15,16, gralloc RGBA/RGBX/BGRA) or when stride is not 16-aligned (NeedConversion 0xe79c) -> output drv fmt 3/5. Not needed for I420 16-aligned.
+ - No physical contiguity requirement (M4U). Use MVA with 16-byte alignment; chroma plane offsets multiple of 16 (true for 16-aligned dims).
+ - Syscalls: ioctl on vcodec devices (VCodecDrvBindingCore/MMAP), mmap of HW regs via eHalGetMMAP, open(/dev/devmap). Same set as decoder; mediacodec seccomp policy that allowed the decoder is expected to allow these (not verified for /dev/devmap in Pie policy).
+5. WHY GetParameter BLOCKS ~10 s (medium confidence)
+   OMX GetParameter(ProfileLevelQuerySupported etc.) -> QueryVideoProfileLevel 0xeedc -> eVEncDrvQueryCapability(1) -> helper 0xd88c(1) -> drvb_f1(0x1fffffff)
+   -> libmtk_drvb drvb_get_data: socket_local_client() to the (non-existent on Pie) drvb daemon, loop usleep(1,000,000) with counter += 1000 until 9000 -> ~9-10 s, then continues (result ignored).
+   Not required for our encoder; just never call QueryCapability type 1 and never use libMtkOmxVenc GetParameter paths.
+6. NOT DETERMINED / LOW CONFIDENCE
+ - Exact enum names of result status values (1,2,3,4) beyond 4=done, 3=skipped(empty). Value 2/8 (buffer full -> HndlFull) path exists.
+ - Whether SPS/PPS has 4-byte start codes (strongly implied) and exact SPS sizes.
+ - FRM_BUF fields other than +0,+4,+8 (+24/28 timestamp is omx-side). BS fields +20..+28 unknown (zero them).
+ - Meaning of NumPFrm=29, SetParam 31/32 details, rate-control mode selection (default CBR-ish, fixed init QP 22?); no explicit RC-mode param found for H264.
+ - IntraFrameRate==0 behaviour (EncodeFrameInit: mod by zero guarded: only first frame is IDR).
+ - Whether cache flush in driver is sufficient for cached memory; recommendation: use uncached (ValMem type 2) or call eVideoFlushCache(&mem,48,1) before Encode and eVideoInvalidateCache after.
+ - Not tested on device (static only).
+
+7. DEVICE-VERIFIED (2026-11-04, tools/venctest/venctest.c, standalone C, no OMX)  -- all of section 3 call sequence works as written
+ - Create(5) -> SetParam(20,{w,h,bufW,bufH}) -> Init -> SetParam(6,&param) [-> SetParam(26) optional] -> SetParam(7) -> Encode(1,NULL,&bs,&res) -> Encode(4,&frm,&bs,&res)* -> SetParam(8) -> DeInit -> Release. All return 0.
+ - CORRECTION: result.status is NOT set to 4 on success; it stays at the pre-set value (1) for both header and frames. Detect success by bs[4] (len) > 0 and rc==0; status 3 = drop (not observed). key flag at ((u8*)res)[12] is correct (1 on IDR, 0 on P).
+ - Header (Encode type 1): 28-29 bytes, 4-byte start codes: SPS(00 00 00 01 67 64 00 LL ...) + PPS(00 00 00 01 68 ea 43 cb). High profile, level_idc 31 @720p (param level 11), 40 @1080p (13). Written once at start (then not repeated by default); IDR frames do NOT contain SPS/PPS unless SetParam(26) (prepend per IDR) is called -> then each IDR has SPS+PPS.
+ - 1080p: driver emits frame_cropping in SPS (ffmpeg reports 1920x1080, bufH 1088 internal). Input buffer must be bufW x bufH padded planes (we replicate edge rows).
+ - Param struct as spec'd works (extra ptr at word 11 = byte +44; extra={gop frames, bps, fps<<16}). Profile 1 (baseline), 4 (main) and 16 (high) accepted; profile 4 yields a bitstream byte-identical in size to 16 (High, ffprobe says High) -> profile field seems to only matter for baseline. fmt 5 (YV12 with V before U) works and gives bit-identical output to I420 when planes are laid out accordingly.
+ - IDR: automatic at frameNo % gop == 0 (frames 0,30,60 for gop 30). SetParam(11) forced IDR at frame 45 worked and restarts the GOP counter (gop 60 run: IDRs at 0 and 45).
+ - Memory: eVideoMemAlloc type 2 (uncached), align 512, 48-byte ValMem, in/out each one alloc; va=alignVa, mva=alignMva; we still call eVideoFlushCache(&mem,48,1) before encode and eVideoInvalidateCache(&mem,48,1) after (harmless). Input 1280x720 buffer = BW*BH*3/2 + 4096, bitstream cap 2 MB. No concurrent decoder test done.
+ - Measured (MT6592): 720p ~89-92 fps encode-call, ~60 fps incl. host-side memcpy of the frame into the uncached buffer; 1080p ~44 fps encode-call, ~32 fps wall. Bitrate (CBR-ish, testsrc2): 720p target 1M->1.13M, 4M->4.10M, 12M->10.9M; 1080p 8M->8.30M. PSNR (ffmpeg vs source): 720p 1M 37.6 dB, 4M 45.3 dB, 12M 61.1 dB; 1080p 8M 45.7 dB. ffmpeg decode clean (no errors).
