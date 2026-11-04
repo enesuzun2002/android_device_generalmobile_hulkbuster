@@ -269,3 +269,6 @@ PRODUCT_DEFAULT_PROPERTY_OVERRIDES += ro.bt.bdaddr_path=/data/misc/bluetooth/bda
 # uses the CMS collector instead of concurrent copying, which removes the
 # read-barrier overhead from every managed field load.
 PRODUCT_ART_USE_READ_BARRIER := false
+
+# Dex preopt: fully compile the apps that drive the UI.
+PRODUCT_DEXPREOPT_SPEED_APPS += SystemUI Trebuchet Settings

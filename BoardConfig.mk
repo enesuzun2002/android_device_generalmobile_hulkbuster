@@ -233,9 +233,12 @@ TARGET_NO_SENSOR_PERMISSION_CHECK := true
 # HIDL
 DEVICE_MANIFEST_FILE := $(DEVICE_PATH)/manifest.xml
 
-# Dex preopt stays off: the 14.1 experiment never had ART use the prebuilt
-# boot image on this device (see git history), so it only cost build time.
-WITH_DEXPREOPT := false
+# Dex preopt: ship the boot image and compiled system apps, so the first
+# boot after a flash/reset doesn't run SystemUI/launcher interpreted. (On
+# 14.1 ART never used the prebuilt image; on 16.0 ART is patched — art/0001.)
+WITH_DEXPREOPT := true
+# userdebug otherwise preopts only the boot image and system_server.
+WITH_DEXPREOPT_BOOT_IMG_AND_SYSTEM_SERVER_ONLY := false
 
 # Recovery
 TARGET_RECOVERY_FSTAB := $(DEVICE_PATH)/rootdir/recovery.fstab
