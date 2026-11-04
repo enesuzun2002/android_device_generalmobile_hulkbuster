@@ -3,12 +3,12 @@ LineageOS 16.0 (Android 9) patches for hulkbuster
 
 Changes to LineageOS source projects that this port needs. The device,
 vendor and kernel repositories carry their own changes; everything that
-touches an upstream LineageOS project lives here. The parent directory
-holds the older cm-14.1 patches (see ../README.md and ../PORTING.md).
+touches an upstream LineageOS project lives here. The older cm-14.1
+patches are in ../los-14.1/ (see its README.md and PORTING.md).
 
 Apply after `repo sync` (idempotent):
 
-    device/generalmobile/hulkbuster/build-tools/patches/lineage-16.0/apply.sh
+    device/generalmobile/hulkbuster/build-tools/patches/los-16.0/apply.sh
 
 or by hand with `git am` in each project. Directory names map to project
 paths with the first '-' turned into '/' (frameworks-native ->

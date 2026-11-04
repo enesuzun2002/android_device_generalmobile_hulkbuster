@@ -26,7 +26,7 @@
  * Capabilities" command (0xFD53): it answers with Command Status 0x01
  * (Unknown HCI Command) and never a Command Complete, so the controller
  * module start-up hangs and Bluetooth hits the enable timeout. Needs
- * build-tools/patches/system-bt/0001-*.patch.
+ * build-tools/patches/los-16.0/system-bt/0001-*.patch.
  */
 #define BTM_BLE_SKIP_OFFLOAD_FEATURES_QUERY
 

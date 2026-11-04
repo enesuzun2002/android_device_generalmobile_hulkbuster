@@ -1,6 +1,6 @@
 #!/bin/sh
 # Apply the hulkbuster lineage-16.0 patches to a LineageOS 16.0 checkout.
-# Usage: device/generalmobile/hulkbuster/build-tools/patches/lineage-16.0/apply.sh [<android-root>]
+# Usage: device/generalmobile/hulkbuster/build-tools/patches/los-16.0/apply.sh [<android-root>]
 # Safe to re-run: a patch that is already applied is skipped.
 set -e
 here=$(cd "$(dirname "$0")" && pwd)
