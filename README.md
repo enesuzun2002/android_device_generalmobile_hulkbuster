@@ -1,4 +1,6 @@
-Copyright (C) 2017 The LineageOS Project @OneLabs.net
+Copyright (C) 2026 enesuzun2002 (emurat.uzun@gmail.com)
+
+Based on the original device tree, Copyright (C) 2017 The LineageOS Project @OneLabs.net
 
 Device Tree for General Mobile ETAB5 (etab5)
 ===========================================================
