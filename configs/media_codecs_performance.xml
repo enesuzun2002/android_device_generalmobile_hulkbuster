@@ -5,6 +5,16 @@
      decode ~14 ms per 1080p frame, ceiling ~68 fps). OMX.google.h264.decoder:
      1080p ~12 fps. -->
 <MediaCodecs>
+    <!-- OMX.hulk.h264.encoder (MT6592 hardware encoder, ByteBuffer/surface input):
+         720p ~75 fps, 1080p ~35 fps encode throughput. -->
+    <Encoders>
+        <MediaCodec name="OMX.hulk.h264.encoder" type="video/avc" update="true">
+            <Limit name="measured-frame-rate-320x240" range="120-200" />
+            <Limit name="measured-frame-rate-720x480" range="90-120" />
+            <Limit name="measured-frame-rate-1280x720" range="60-75" />
+            <Limit name="measured-frame-rate-1920x1080" range="30-35" />
+        </MediaCodec>
+    </Encoders>
     <Decoders>
         <MediaCodec name="OMX.hulk.h264.decoder" type="video/avc" update="true">
             <Limit name="measured-frame-rate-320x240" range="200-300" />
