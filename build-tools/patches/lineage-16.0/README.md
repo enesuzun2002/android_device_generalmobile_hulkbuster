@@ -70,35 +70,6 @@ frameworks-av/0001-cameraservice-cache-hal1-legacy-parameters-at-startu.patch
     parameters, so the first app open does not race the shim's own open
     and get evicted.
 
-frameworks-av/0002-stagefright-add-OMX.hulk.h264.decoder-for-MT6592-har.patch
-frameworks-av/0003-stagefright-use-software-renderer-path-and-finish-OM.patch
-frameworks-av/0004-stagefright-advertise-up-to-level-4.2-on-OMX.hulk.h2.patch
-    OMX.hulk.h264.decoder: our own OMX component (codecs/hulkavcdec) that
-    drives the MT6592 VDEC hardware through libvcodecdrv.so directly. MTK's
-    libMtkOmxVdec is unusable on Pie: its bundled libClearMotionFW (MJC)
-    was built for a different decoder layout and corrupts it. Output is
-    de-tiled (MTK block format -> I420) with NEON and rendered like the
-    Google decoders, so OMX.hulk. joins OMX.google. in ACodec/MediaCodec's
-    software-renderer checks. Advertises up to 1080p60, High@4.2, which
-    YouTube needs to pick it. Device side: configs/media_codecs.xml,
-    seccomp/mediacodec.policy, PRODUCT_PACKAGES in device.mk.
-
-frameworks-av/0005-stagefright-pipeline-hulkavcdec-de-tile-queue-for-10.patch
-    1080p60 for OMX.hulk.h264.decoder: queue de-tile jobs (decode no longer
-    waits on the worker), flush only the written bitstream bytes, write the
-    de-tiled output in 64-byte bursts, 16 output buffers. 1080p60 went from
-    ~14 to ~60 fps; HW decode is ~14 ms per 1080p frame (ceiling ~68 fps).
-
-frameworks-av/0006-stagefright-convert-hulkavcdec-frames-into-gralloc-b.patch
-frameworks-av/0007-stagefright-render-OMX.hulk.-decoder-output-through-.patch
-    OMX.hulk.h264.decoder now takes native-window (YV12 gralloc) buffers and
-    converts the MTK block frames into them with the MDP (libdpframework
-    DpBlitStream, dest = the gralloc ION fd), instead of a CPU de-tile into
-    a ByteBuffer plus SoftwareRenderer copy; OMX.hulk. leaves ACodec/
-    MediaCodec's software-renderer checks. 1080p60: media.codec 48-66% ->
-    16-22%, mediaserver 45-53% -> 13-16%, 0 drops. The CPU de-tile path stays
-    for ByteBuffer users and as per-frame fallback.
-
 hardware-interfaces/0001-camera-device-support-pre-O-HAL1-clients.patch
     MediaTek's N-era HAL1 calls get_memory with a NULL cookie and takes
     references on preview buffers as ANativeWindowBuffers; handle both.
@@ -138,3 +109,9 @@ frameworks-base/0003-SystemUI-grow-the-notification-launch-animation-from.patch
 Retired: hardware-interfaces 0005 and 0007 (HWC2On1Adapter fence/tearing
 fixes) now live in the device tree (hwc/: libhwc2on1adapter_hulkbuster and
 android.hardware.graphics.composer@2.1-impl-hulkbuster).
+
+Retired: frameworks-av 0002-0008 (OMX.hulk.h264.decoder and encoder). The
+components now live in the device tree (media/hulkavcdec, media/hulkavcenc),
+exposed through our own OMX plugin libstagefrighthw.so (media/omx), which
+replaces the MediaTek blob of that name; frameworks/av needs no changes for
+them.
