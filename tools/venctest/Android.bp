@@ -1,0 +1,8 @@
+// Standalone prototype: encode raw I420 to H.264 Annex-B with the MTK HW
+// encoder by calling libvcodecdrv.so directly (dlopen), no OMX.
+cc_binary {
+    name: "venctest",
+    srcs: ["venctest.c"],
+    shared_libs: ["liblog"],
+    cflags: ["-Wall", "-Wno-unused-parameter"],
+}
