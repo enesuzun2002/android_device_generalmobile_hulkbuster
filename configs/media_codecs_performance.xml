@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!-- Measured decode rates on the E-Tab5 (MT6592, 59.9 Hz panel), so players
+     that check achievable frame rates (YouTube) can offer 60 fps formats.
+     OMX.hulk.h264.decoder: 720p60 played at 59.9 fps, 1080p30 at 30.0 fps,
+     1080p60 only ~14 fps. OMX.google.h264.decoder: 1080p ~12 fps. -->
+<MediaCodecs>
+    <Decoders>
+        <MediaCodec name="OMX.hulk.h264.decoder" type="video/avc" update="true">
+            <Limit name="measured-frame-rate-320x240" range="200-300" />
+            <Limit name="measured-frame-rate-720x480" range="120-180" />
+            <Limit name="measured-frame-rate-1280x720" range="60-80" />
+            <Limit name="measured-frame-rate-1920x1080" range="30-40" />
+        </MediaCodec>
+        <MediaCodec name="OMX.google.h264.decoder" type="video/avc" update="true">
+            <Limit name="measured-frame-rate-320x240" range="120-200" />
+            <Limit name="measured-frame-rate-720x480" range="40-60" />
+            <Limit name="measured-frame-rate-1280x720" range="20-30" />
+            <Limit name="measured-frame-rate-1920x1080" range="10-14" />
+        </MediaCodec>
+    </Decoders>
+</MediaCodecs>
