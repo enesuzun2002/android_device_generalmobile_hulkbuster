@@ -123,11 +123,11 @@ PRODUCT_COPY_FILES += \
     $(DEVICE_PATH)/rootdir/sbin/rebootrecovery.sh:recovery/root/sbin/rebootrecovery.sh \
     $(DEVICE_PATH)/rootdir/sbin/rebootsystem.sh:recovery/root/sbin/rebootsystem.sh
 
-# On-device diagnostics (mtkdiag.sh + its watch service). Debug-only: it
-# produces a rotating log tree under /data/mtkdiag. Kept enabled (the
-# default) while this ROM is being validated; set MTKDIAG=false for a
-# clean-base build.
-MTKDIAG ?= true
+# On-device diagnostics (mtkdiag.sh + its services). Debug-only: it mirrors
+# the kernel log and snapshots logcat into /data/mtkdiag continuously. Off by
+# default now that the ROM boots reliably; build with MTKDIAG=true and start
+# the services by hand when debugging a boot.
+MTKDIAG ?= false
 ifeq ($(strip $(MTKDIAG)),true)
 PRODUCT_COPY_FILES += \
     $(DEVICE_PATH)/rootdir/mtkdiag.sh:root/mtkdiag.sh

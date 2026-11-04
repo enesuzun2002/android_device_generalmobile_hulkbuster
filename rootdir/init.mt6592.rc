@@ -293,15 +293,6 @@ on post-fs-data
     # BD address for the bluetooth HAL (ro.bt.bdaddr_path), see bt_addr.sh
     exec - root root -- /system/bin/sh /bt_addr.sh
 
-    # Keep a copy of the kernel ring buffer on disk for as long as init
-    # survives. This is the only diagnostic we have without UART or adb.
-    start mtkdiag_pump
-
-    # The failures that matter happen after `on fs`, and logcat's buffer wraps,
-    # so take a rolling series of user-space snapshots too (tombstones
-    # included). See mtkdiag.sh watch.
-    start mtkdiag_watch
-
     # Create the directories used by the Wireless subsystem
     mkdir /data/misc/wifi 0770 wifi wifi
     mkdir /data/misc/wifi/sockets 0770 wifi wifi
@@ -397,10 +388,6 @@ on fs
     mkdir /protect_s 0771 system system
 
     mount_all /fstab.mt6592
-
-    # Dump boot state as soon as the real partitions are up, so a failure
-    # later on still leaves evidence on disk. See mtkdiag.sh.
-    start mtkdiag_snapshot
 
     write /proc/bootprof "INIT:NAND:Mount_END"
 
@@ -591,8 +578,9 @@ service wifi2agps /system/bin/wifi2agps
     group gps inet
     oneshot
 
-# Boot diagnostics: leave a record of the boot on persistent storage so a
-# failed boot can be inspected afterwards. Harmless if it never runs.
+# Boot diagnostics (bring-up only): not started by default any more. Build
+# with MTKDIAG=true and `start mtkdiag_snapshot|mtkdiag_pump|mtkdiag_watch`
+# by hand to record a boot under /data/mtkdiag.
 service mtkdiag_snapshot /system/bin/sh /mtkdiag.sh snapshot
     class core
     user root
