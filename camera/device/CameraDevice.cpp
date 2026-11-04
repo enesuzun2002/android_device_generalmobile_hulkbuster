@@ -915,6 +915,14 @@ Return<Status> CameraDevice::storeMetaDataInBuffers(bool enable) {
         ALOGE("%s called while camera is not opened", __FUNCTION__);
         return Status::OPERATION_NOT_SUPPORTED;
     }
+    // The camera blob would hand out 8-byte native-handle metadata buffers, which the
+    // device tree's OMX.hulk.h264.encoder rejects (its input port wants the 12-byte
+    // ANW metadata size), so recording fails at useBuffer. Refusing metadata mode
+    // makes CameraSource fall back to plain YUV recording frames. Set
+    // ro.vendor.camera.meta_recording=true to allow metadata mode again.
+    if (enable && !property_get_bool("ro.vendor.camera.meta_recording", false)) {
+        return Status::ILLEGAL_ARGUMENT;
+    }
     if (mDevice->ops->store_meta_data_in_buffers) {
         status_t s = mDevice->ops->store_meta_data_in_buffers(mDevice, enable);
         if (s == OK && enable) {
