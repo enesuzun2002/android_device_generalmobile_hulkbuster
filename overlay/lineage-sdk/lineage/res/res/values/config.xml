@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-     Copyright (C) 2017 The LineageOS Project         
+     Copyright (C) 2017 The LineageOS Project
+     Copyright (C) 2026 enesuzun2002
 
      Licensed under the Apache License, Version 2.0 (the "License");
      you may not use this file except in compliance with the License.
@@ -15,6 +16,12 @@
      limitations under the License.
 -->
 <resources>
+
+    <!-- Hardware keys: capacitive Home (1), Back (2) and App switch (16) on
+         the touch panel (KEY_HOMEPAGE/KEY_BACK/KEY_APPSELECT, all backlit by
+         the button-backlight LED) plus the volume rocker (64). This enables
+         the button backlight and key settings in LineageParts. -->
+    <integer name="config_deviceHardwareKeys">83</integer>
 
     <!-- Default values for LiveDisplay -->
     <integer name="config_defaultLiveDisplayMode">0</integer>
