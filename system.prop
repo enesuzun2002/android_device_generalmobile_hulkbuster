@@ -76,12 +76,6 @@ ro.radio.noril=yes
 pm.dexopt.install=speed
 pm.dexopt.bg-dexopt=speed
 
-# SurfaceFlinger: latch app buffers before their GPU fence signals (one frame
-# less latency). Settings scroll jank fell from ~1-9% to 0-0.2% per round,
-# 99th percentile 16-23 ms -> 9-11 ms. Drop this if black or half-drawn
-# frames show up.
-debug.sf.latch_unsignaled=1
-
 # libdpframework (MDP) and libvcodec log several lines per decoded frame
 # (~370/s at 1080p60, ~7% CPU in logd); keep them silent.
 log.tag.MDP=S
